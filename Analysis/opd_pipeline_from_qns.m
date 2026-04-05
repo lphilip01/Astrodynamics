@@ -3,90 +3,126 @@ function out = opd_pipeline_from_qns(t, xc, xd, paramsChief, paramsDeputy, mode,
 %
 % Complete QNS -> ROE -> RTN -> OPD / OPDdot pipeline with perturbation breakdown.
 %
-% Inputs:
-%   t            : Nx1 time vector [s]
-%   xc           : Nx6 chief QNS state history
-%   xd           : Nx6 deputy QNS state history
+% Supports:
+%   - single deputy: xd is Nx6, paramsDeputy is struct
+%   - multiple deputies: xd is 1xNd cell, each cell Nx6
+%                        paramsDeputy is 1xNd cell of structs
 %
-%   paramsChief  : params struct for chief (used by qns_perturbation_breakdown)
-%   paramsDeputy : params struct for deputy
-%
-%   mode         : 'phibeta' or 'radec'
-%
-%   target       : target direction
-%                  if mode='phibeta' : [phi0, beta] [rad], 1x2 or Nx2
-%                  if mode='radec'   : [RA, Dec] [rad], 1x2 or Nx2
-%
-% Outputs:
-%   out : struct containing
-%
-%     out.roe                    Nx6  ROE state
-%     out.roe_dot.total          Nx6
-%     out.roe_dot.J2             Nx6
-%     out.roe_dot.SRP            Nx6
-%     out.roe_dot.Moon           Nx6
-%     out.roe_dot.Sun            Nx6
-%
-%     out.dr_rtn                 Nx3  RTN relative position [km]
-%     out.opd                    Nx1  OPD [km]
-%
-%     out.opd_dot.total          Nx1  OPD rate [km/s]
-%     out.opd_dot.J2             Nx1
-%     out.opd_dot.SRP            Nx1
-%     out.opd_dot.Moon           Nx1
-%     out.opd_dot.Sun            Nx1
-%
-%     out.chief.rates.total      Nx6  chief QNS rates
-%     out.chief.rates.J2         Nx6
-%     out.chief.rates.SRP        Nx6
-%     out.chief.rates.Moon       Nx6
-%     out.chief.rates.Sun        Nx6
-%
-%     out.deputy.rates.total     Nx6  deputy QNS rates
-%     out.deputy.rates.J2        Nx6
-%     out.deputy.rates.SRP       Nx6
-%     out.deputy.rates.Moon      Nx6
-%     out.deputy.rates.Sun       Nx6
-%
-%     out.source_geom.total      auxiliary geometry struct from opd_rate_from_roe
-%     out.source_geom.J2         same, for source-specific OPD rate
-%     out.source_geom.SRP        ...
-%     out.source_geom.Moon       ...
-%     out.source_geom.Sun        ...
-%
-% Dependencies:
-%   qns_perturbation_breakdown.m
-%   roe_from_qns_chief_deputy.m
-%   rtn_from_roe.m
-%   opd_from_rtn.m
-%   opd_rate_from_roe.m
-%
-% Notes:
-%   - Uses the current propagated chief/deputy states as the reference states.
-%   - Source-specific OPD rates are computed using source-specific chief geometry rates
-%     and source-specific ROE rates.
-%   - OPD itself is geometric and is not source-separated; only OPDdot is.
+% For single deputy, output format is unchanged.
+% For multiple deputies, output fields that depend on deputy are returned as cells:
+%   out.roe{j}, out.roe_dot.J2{j}, out.dr_rtn{j}, out.opd{j}, out.opd_dot.J2{j}, ...
 %
 
-% -------------------------------------------------------------------------
-% Input checks / shaping
-% -------------------------------------------------------------------------
 if isvector(t), t = t(:); end
 N = length(t);
 
-if size(xc,1) ~= N || size(xd,1) ~= N || size(xc,2) ~= 6 || size(xd,2) ~= 6
-    error('xc and xd must be Nx6 with same N as t.');
-end
-
+% Expand target if needed
 if size(target,1) == 1
     target = repmat(target, N, 1);
 elseif size(target,1) ~= N
     error('target must be 1x2 or Nx2 with same N as t.');
 end
 
-% -------------------------------------------------------------------------
-% Preallocate
-% -------------------------------------------------------------------------
+% Single-deputy mode
+if ~iscell(xd)
+    out = local_pipeline_single(t, xc, xd, paramsChief, paramsDeputy, mode, target);
+    return
+end
+
+% Multi-deputy mode
+nDep = numel(xd);
+
+if ~iscell(paramsDeputy)
+    error('If xd is a cell array, paramsDeputy must also be a cell array.');
+end
+if numel(paramsDeputy) ~= nDep
+    error('xd and paramsDeputy cell arrays must have the same length.');
+end
+
+% Run single pipeline per deputy, then pack
+singleOut = cell(1, nDep);
+for j = 1:nDep
+    singleOut{j} = local_pipeline_single(t, xc, xd{j}, paramsChief, paramsDeputy{j}, mode, target);
+end
+
+% Keep chief info once
+out.chief = singleOut{1}.chief;
+
+% Pack deputy-dependent fields into cells
+out.roe = cell(1,nDep);
+out.dr_rtn = cell(1,nDep);
+out.opd = cell(1,nDep);
+out.source_geom = struct('total',[],'J2',[],'SRP',[],'Moon',[],'Sun',[]);
+out.roe_dot = struct('total',[],'J2',[],'SRP',[],'Moon',[],'Sun',[]);
+out.opd_dot = struct('total',[],'J2',[],'SRP',[],'Moon',[],'Sun',[]);
+out.deputy = struct('rates',struct('total',[],'J2',[],'SRP',[],'Moon',[],'Sun',[]));
+
+out.roe_dot.total = cell(1,nDep);
+out.roe_dot.J2    = cell(1,nDep);
+out.roe_dot.SRP   = cell(1,nDep);
+out.roe_dot.Moon  = cell(1,nDep);
+out.roe_dot.Sun   = cell(1,nDep);
+
+out.opd_dot.total = cell(1,nDep);
+out.opd_dot.J2    = cell(1,nDep);
+out.opd_dot.SRP   = cell(1,nDep);
+out.opd_dot.Moon  = cell(1,nDep);
+out.opd_dot.Sun   = cell(1,nDep);
+
+out.deputy.rates.total = cell(1,nDep);
+out.deputy.rates.J2    = cell(1,nDep);
+out.deputy.rates.SRP   = cell(1,nDep);
+out.deputy.rates.Moon  = cell(1,nDep);
+out.deputy.rates.Sun   = cell(1,nDep);
+
+out.source_geom.total = cell(1,nDep);
+out.source_geom.J2    = cell(1,nDep);
+out.source_geom.SRP   = cell(1,nDep);
+out.source_geom.Moon  = cell(1,nDep);
+out.source_geom.Sun   = cell(1,nDep);
+
+for j = 1:nDep
+    s = singleOut{j};
+    out.roe{j} = s.roe;
+    out.dr_rtn{j} = s.dr_rtn;
+    out.opd{j} = s.opd;
+
+    out.roe_dot.total{j} = s.roe_dot.total;
+    out.roe_dot.J2{j}    = s.roe_dot.J2;
+    out.roe_dot.SRP{j}   = s.roe_dot.SRP;
+    out.roe_dot.Moon{j}  = s.roe_dot.Moon;
+    out.roe_dot.Sun{j}   = s.roe_dot.Sun;
+
+    out.opd_dot.total{j} = s.opd_dot.total;
+    out.opd_dot.J2{j}    = s.opd_dot.J2;
+    out.opd_dot.SRP{j}   = s.opd_dot.SRP;
+    out.opd_dot.Moon{j}  = s.opd_dot.Moon;
+    out.opd_dot.Sun{j}   = s.opd_dot.Sun;
+
+    out.deputy.rates.total{j} = s.deputy.rates.total;
+    out.deputy.rates.J2{j}    = s.deputy.rates.J2;
+    out.deputy.rates.SRP{j}   = s.deputy.rates.SRP;
+    out.deputy.rates.Moon{j}  = s.deputy.rates.Moon;
+    out.deputy.rates.Sun{j}   = s.deputy.rates.Sun;
+
+    out.source_geom.total{j} = s.source_geom.total;
+    out.source_geom.J2{j}    = s.source_geom.J2;
+    out.source_geom.SRP{j}   = s.source_geom.SRP;
+    out.source_geom.Moon{j}  = s.source_geom.Moon;
+    out.source_geom.Sun{j}   = s.source_geom.Sun;
+end
+
+end
+
+% =========================================================================
+function out = local_pipeline_single(t, xc, xd, paramsChief, paramsDeputy, mode, target)
+
+N = length(t);
+
+if size(xc,1) ~= N || size(xd,1) ~= N || size(xc,2) ~= 6 || size(xd,2) ~= 6
+    error('xc and xd must be Nx6 with same N as t.');
+end
+
 chiefRates.total = zeros(N,6);
 chiefRates.J2    = zeros(N,6);
 chiefRates.SRP   = zeros(N,6);
@@ -121,18 +157,13 @@ auxSRP   = cell(N,1);
 auxMoon  = cell(N,1);
 auxSun   = cell(N,1);
 
-% -------------------------------------------------------------------------
-% Main loop
-% -------------------------------------------------------------------------
 for k = 1:N
     xc_k = xc(k,:).';
     xd_k = xd(k,:).';
 
-    % Chief / deputy perturbation breakdown at current state
     bc = qns_perturbation_breakdown(t(k), xc_k, paramsChief);
     bd = qns_perturbation_breakdown(t(k), xd_k, paramsDeputy);
 
-    % Store QNS rates
     chiefRates.total(k,:) = bc.rates.total.';
     chiefRates.J2(k,:)    = bc.rates.J2.';
     chiefRates.SRP(k,:)   = bc.rates.SRP.';
@@ -145,21 +176,17 @@ for k = 1:N
     deputyRates.Moon(k,:)  = bd.rates.Moon.';
     deputyRates.Sun(k,:)   = bd.rates.Sun.';
 
-    % ROE state from chief/deputy QNS states
     roe_k = roe_from_qns_chief_deputy(xc(k,:), xd(k,:));
     roe(k,:) = roe_k;
 
-    % ROE rate from chief/deputy QNS rates, by perturbation
     roeDotTot(k,:)  = qnsrates_to_roerates(xc(k,:), xd(k,:), bc.rates.total.', bd.rates.total.');
     roeDotJ2(k,:)   = qnsrates_to_roerates(xc(k,:), xd(k,:), bc.rates.J2.',    bd.rates.J2.');
     roeDotSRP(k,:)  = qnsrates_to_roerates(xc(k,:), xd(k,:), bc.rates.SRP.',   bd.rates.SRP.');
     roeDotMoon(k,:) = qnsrates_to_roerates(xc(k,:), xd(k,:), bc.rates.Moon.',  bd.rates.Moon.');
     roeDotSun(k,:)  = qnsrates_to_roerates(xc(k,:), xd(k,:), bc.rates.Sun.',   bd.rates.Sun.');
 
-    % RTN relative position
     dr_rtn(k,:) = rtn_from_roe(roe_k, xc(k,1), xc(k,6));
 
-    % OPD (single geometric quantity from total current state)
     chiefGeomState.a    = xc(k,1);
     chiefGeomState.u    = xc(k,6);
     chiefGeomState.inc  = xc(k,4);
@@ -167,7 +194,6 @@ for k = 1:N
 
     [opd(k), ~] = opd_from_rtn(dr_rtn(k,:), mode, target(k,:), chiefGeomState);
 
-    % Total OPD rate
     chiefGeomTot.a        = xc(k,1);
     chiefGeomTot.u        = xc(k,6);
     chiefGeomTot.a_dot    = bc.rates.total(1);
@@ -176,61 +202,37 @@ for k = 1:N
     chiefGeomTot.RAAN     = xc(k,5);
     chiefGeomTot.inc_dot  = bc.rates.total(4);
     chiefGeomTot.RAAN_dot = bc.rates.total(5);
-
     [opdDotTot(k), auxTotal{k}] = opd_rate_from_roe(roe_k, roeDotTot(k,:), chiefGeomTot, mode, target(k,:));
 
-    % J2 contribution to OPDdot
-    chiefGeomJ2.a        = xc(k,1);
-    chiefGeomJ2.u        = xc(k,6);
+    chiefGeomJ2 = chiefGeomTot;
     chiefGeomJ2.a_dot    = bc.rates.J2(1);
     chiefGeomJ2.u_dot    = bc.rates.J2(6);
-    chiefGeomJ2.inc      = xc(k,4);
-    chiefGeomJ2.RAAN     = xc(k,5);
     chiefGeomJ2.inc_dot  = bc.rates.J2(4);
     chiefGeomJ2.RAAN_dot = bc.rates.J2(5);
-
     [opdDotJ2(k), auxJ2{k}] = opd_rate_from_roe(roe_k, roeDotJ2(k,:), chiefGeomJ2, mode, target(k,:));
 
-    % SRP contribution
-    chiefGeomSRP.a        = xc(k,1);
-    chiefGeomSRP.u        = xc(k,6);
+    chiefGeomSRP = chiefGeomTot;
     chiefGeomSRP.a_dot    = bc.rates.SRP(1);
     chiefGeomSRP.u_dot    = bc.rates.SRP(6);
-    chiefGeomSRP.inc      = xc(k,4);
-    chiefGeomSRP.RAAN     = xc(k,5);
     chiefGeomSRP.inc_dot  = bc.rates.SRP(4);
     chiefGeomSRP.RAAN_dot = bc.rates.SRP(5);
-
     [opdDotSRP(k), auxSRP{k}] = opd_rate_from_roe(roe_k, roeDotSRP(k,:), chiefGeomSRP, mode, target(k,:));
 
-    % Moon contribution
-    chiefGeomMoon.a        = xc(k,1);
-    chiefGeomMoon.u        = xc(k,6);
+    chiefGeomMoon = chiefGeomTot;
     chiefGeomMoon.a_dot    = bc.rates.Moon(1);
     chiefGeomMoon.u_dot    = bc.rates.Moon(6);
-    chiefGeomMoon.inc      = xc(k,4);
-    chiefGeomMoon.RAAN     = xc(k,5);
     chiefGeomMoon.inc_dot  = bc.rates.Moon(4);
     chiefGeomMoon.RAAN_dot = bc.rates.Moon(5);
-
     [opdDotMoon(k), auxMoon{k}] = opd_rate_from_roe(roe_k, roeDotMoon(k,:), chiefGeomMoon, mode, target(k,:));
 
-    % Sun gravity contribution
-    chiefGeomSun.a        = xc(k,1);
-    chiefGeomSun.u        = xc(k,6);
+    chiefGeomSun = chiefGeomTot;
     chiefGeomSun.a_dot    = bc.rates.Sun(1);
     chiefGeomSun.u_dot    = bc.rates.Sun(6);
-    chiefGeomSun.inc      = xc(k,4);
-    chiefGeomSun.RAAN     = xc(k,5);
     chiefGeomSun.inc_dot  = bc.rates.Sun(4);
     chiefGeomSun.RAAN_dot = bc.rates.Sun(5);
-
     [opdDotSun(k), auxSun{k}] = opd_rate_from_roe(roe_k, roeDotSun(k,:), chiefGeomSun, mode, target(k,:));
 end
 
-% -------------------------------------------------------------------------
-% Package output
-% -------------------------------------------------------------------------
 out.roe = roe;
 
 out.roe_dot.total = roeDotTot;

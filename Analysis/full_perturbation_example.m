@@ -25,7 +25,7 @@ params.jd0     = juliandate(datetime(2024,1,1,0,0,0));
 % Example near-circular initial state
 a0    = RE + 35786;      % km
 e0    = 1e-4;
-inc0  = 0*deg;
+inc0  = 1e-4*deg;
 RAAN0 = 0;
 w0    = 0;
 M0    = 0;

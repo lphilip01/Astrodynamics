@@ -148,8 +148,11 @@ if useShadow
 else
     nu_shadow = 1;
 end
-
+if m==0
+pSR=0;    
+else
 pSR = nu_shadow * (S/c) * CR * As / m / 1000;  % km/s^2
+end
 s_hat = r_sun / norm(r_sun);
 
 ur_srp = dot(s_hat, Rhat);
@@ -170,27 +173,33 @@ AN_Moon = dot(a_moon_eci, Nhat);
 
 %% ---------- Sun gravity ----------
 rho_sun = r_sun - r_sat;
+
+if muSun==0
+a_sun_eci=zeros(1,length(Rhat));
+else
 a_sun_eci = muSun * (rho_sun/norm(rho_sun)^3 - r_sun/norm(r_sun)^3);
+end
 
 AR_Sun = dot(a_sun_eci, Rhat);
 AT_Sun = dot(a_sun_eci, That);
 AN_Sun = dot(a_sun_eci, Nhat);
 
 %% ---------- RTN accel -> QNS rates ----------
-    function q = accel_to_qns(AR,AT,AN)
-        adot     = (2/n) * AT;
-        udot     = n - (2/(n*a))*AR - (cos(inc)/(n*a*sin_i))*sin(u)*AN;
-        exdot    = (1/(n*a)) * ( sin(u)*AR + 2*cos(u)*AT );
-        eydot    = (1/(n*a)) * ( -cos(u)*AR + 2*sin(u)*AT );
-        idot     = (1/(n*a)) * cos(u) * AN;
-        Omegadot = (1/(n*a*sin_i)) * sin(u) * AN;
-        q = [adot; exdot; eydot; idot; Omegadot; udot];
-    end
+    % Perturbation-only rates (no n in udot)
+function q = accel_to_qns_perturb(AR,AT,AN)
+    adot     = (2/n) * AT;
+    udot     = -(2/(n*a))*AR - (cos(inc)/(n*a*sin_i))*sin(u)*AN;  % no n
+    exdot    = (1/(n*a))*( sin(u)*AR + 2*cos(u)*AT );
+    eydot    = (1/(n*a))*(-cos(u)*AR + 2*sin(u)*AT );
+    idot     = (1/(n*a))* cos(u)*AN;
+    Omegadot = (1/(n*a*sin_i))* sin(u)*AN;
+    q = [adot; exdot; eydot; idot; Omegadot; udot];
+end
 
-rates_J2   = accel_to_qns(AR_J2,   AT_J2,   AN_J2);
-rates_SRP  = accel_to_qns(AR_SRP,  AT_SRP,  AN_SRP);
-rates_Moon = accel_to_qns(AR_Moon, AT_Moon, AN_Moon);
-rates_Sun  = accel_to_qns(AR_Sun,  AT_Sun,  AN_Sun);
+rates_J2   = accel_to_qns_perturb(AR_J2,  AT_J2,  AN_J2);
+rates_SRP  = accel_to_qns_perturb(AR_SRP, AT_SRP, AN_SRP);
+rates_Moon = accel_to_qns_perturb(AR_Moon,AT_Moon,AN_Moon);
+rates_Sun  = accel_to_qns_perturb(AR_Sun, AT_Sun, AN_Sun);
 
 out.accel.J2   = [AR_J2;   AT_J2;   AN_J2];
 out.accel.SRP  = [AR_SRP;  AT_SRP;  AN_SRP];
@@ -202,4 +211,6 @@ out.rates.SRP   = rates_SRP;
 out.rates.Moon  = rates_Moon;
 out.rates.Sun   = rates_Sun;
 out.rates.total = rates_J2 + rates_SRP + rates_Moon + rates_Sun;
+out.rates.total(6) = out.rates.total(6) + n;  % n added exactly once
+
 end
