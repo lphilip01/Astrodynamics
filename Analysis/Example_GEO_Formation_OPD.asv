@@ -1,4 +1,4 @@
-function [out, sol]=Example_GEO_Formation_OPD
+function [t,out, sol]=Example_GEO_Formation_OPD
 % Example_GEO_Linear_OPD
 %
 % End-to-end STARI validation example using the full OPD-rate pipeline:
@@ -181,7 +181,6 @@ opts = odeset('RelTol',1e-10,'AbsTol',1e-10,'InitialStep',T0/1000);
 [~, xd2] = ode45(@(t,x) rates_qns_total(t,x,paramsDeputy2), tspan, xd0{2}, opts);
 [~, xd3] = ode45(@(t,x) rates_qns_total(t,x,paramsDeputy3), tspan, xd0{3}, opts);
 
-out.t=t;
 %% ------------------------------------------------------------------------
 % Full OPD-rate pipeline
 %% ------------------------------------------------------------------------
@@ -201,9 +200,9 @@ xdCell={xd,xd2,xd3};
 [kStart, info] = find_science_hold_start(out, 5, 'bestlocal');
 
 k0 = kStart;
-Tint = 60*60;   % 30 min
+Tint = 1800;   % 30 min
 t0 = t(k0);
-tHold = linspace(0, Tint, 200).';
+tHold = linspace(0, Tint, 121).';
 
 % Interpolate chief onto hold grid
 chiefHold = interp1(t - t0, xc, tHold, 'linear');
@@ -250,13 +249,12 @@ if plot
 
 plot_opd_pipeline_results(t, out)
 
+sol.RTN
 
 figure();plot3(out.dr_rtn{1}(:,2).*1000,out.dr_rtn{1}(:,3).*1000,out.dr_rtn{1}(:,1).*1000,'DisplayName','Collector 1');hold on; plot3(out.dr_rtn{2}(:,2).*1000,out.dr_rtn{2}(:,3).*1000,out.dr_rtn{2}(:,1).*1000,'DisplayName','Collector 2');plot3(out.dr_rtn{3}(:,2).*1000,out.dr_rtn{3}(:,3).*1000,out.dr_rtn{3}(:,1).*1000,'DisplayName','Collector 3');legend();title("RTN for Collector Satellites");ylabel("Normal Position");xlabel("Tangential position");zlabel("Radial position");
 figure();plot(t./(60*60),out.opd{1}.*1000,'DisplayName','Collector 1');hold on; plot(t./(60*60),out.opd{2}.*1000,'DisplayName', 'Collector 2');plot(t./(60*60),out.opd{3}.*1000,'DisplayName', 'Collector 3');legend();title("OPD for Collector Satellites");ylabel("OPD (m)");xlabel("time");yline(0);
 
 figure();plot(t./(60*60),out.opd{1}.*1000 + out.opd{2}.*1000+out.opd{3}.*1000,'DisplayName','Combined OPD');legend();title("OPD for Collector Satellites");ylabel("OPD (m)");xlabel("time");yline(0);
-
-figure();plot3(sol.RTN{1}(:,2).*1000,sol.RTN{1}(:,3).*1000,sol.RTN{1}(:,1).*1000,'DisplayName','Collector 1');hold on; plot3(sol.RTN{2}(:,2).*1000,sol.RTN{2}(:,3).*1000,sol.RTN{2}(:,1).*1000,'DisplayName','Collector 2');plot3(sol.RTN{3}(:,2).*1000,sol.RTN{3}(:,3).*1000,sol.RTN{3}(:,1).*1000,'DisplayName','Collector 3');legend();title("RTN for Collector Satellites");ylabel("Normal Position");xlabel("Tangential position");zlabel("Radial position");
 
 opts = struct();
 opts.Dmax_m = 5;
