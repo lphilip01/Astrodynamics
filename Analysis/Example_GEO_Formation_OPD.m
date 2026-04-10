@@ -14,7 +14,7 @@ function [out, sol]=Example_GEO_Formation_OPD(ra,dec,rho_m,Tint_s,Asc,mc,Asd,md,
 
 close all; clc;
 
-plot=0;
+plot_figs=1;
 optimize=1;
 %% ------------------------------------------------------------------------
 % Constants
@@ -237,12 +237,17 @@ end
 %% ------------------------------------------------------------------------
 
 
-if plot
+if plot_figs
 
 plot_opd_pipeline_results(t, out)
 
+if optimize
+plot_science_hold_ocp_solution(sol)
+end
+
 
 figure();plot3(out.dr_rtn{1}(:,2).*1000,out.dr_rtn{1}(:,3).*1000,out.dr_rtn{1}(:,1).*1000,'DisplayName','Collector 1');hold on; plot3(out.dr_rtn{2}(:,2).*1000,out.dr_rtn{2}(:,3).*1000,out.dr_rtn{2}(:,1).*1000,'DisplayName','Collector 2');plot3(out.dr_rtn{3}(:,2).*1000,out.dr_rtn{3}(:,3).*1000,out.dr_rtn{3}(:,1).*1000,'DisplayName','Collector 3');legend();title("RTN for Collector Satellites");ylabel("Normal Position");xlabel("Tangential position");zlabel("Radial position");
+hold off
 figure();plot(t./(60*60),out.opd{1}.*1000,'DisplayName','Collector 1');hold on; plot(t./(60*60),out.opd{2}.*1000,'DisplayName', 'Collector 2');plot(t./(60*60),out.opd{3}.*1000,'DisplayName', 'Collector 3');legend();title("OPD for Collector Satellites");ylabel("OPD (m)");xlabel("time");yline(0);
 
 figure();plot(t./(60*60),out.opd{1}.*1000 + out.opd{2}.*1000+out.opd{3}.*1000,'DisplayName','Combined OPD');legend();title("OPD for Collector Satellites");ylabel("OPD (m)");xlabel("time");yline(0);
@@ -256,28 +261,28 @@ opts.startMode = 'bestWindow';
 opts.entryTime_s = 60;
 opts.verbose = true;
 
-hold_opd = estimate_dv_science_hold(t, out, opts);
-
-figure();
-plot(hold_opd.integrationTimes_s/60, hold_opd.totalDV_max_mps, 'LineWidth', 1.5);
-xlabel('Integration time [min]');
-ylabel('Estimated total \DeltaV max-per-sat [m/s]');
-title('Science Hold Delta-V vs Integration Time');
-grid on
-
-figure();
-plot(hold_opd.integrationTimes_s/60, hold_opd.totalDV_sum_mps, 'LineWidth', 1.5);
-xlabel('Integration time [min]');
-ylabel('Estimated total formation \DeltaV [m/s]');
-title('Science Hold Delta-V (sum across collectors)');
-grid on
+% hold_opd = estimate_dv_science_hold(t, out, opts);
+% 
+% figure();
+% plot(hold_opd.integrationTimes_s/60, hold_opd.totalDV_max_mps, 'LineWidth', 1.5);
+% xlabel('Integration time [min]');
+% ylabel('Estimated total \DeltaV max-per-sat [m/s]');
+% title('Science Hold Delta-V vs Integration Time');
+% grid on
+% 
+% figure();
+% plot(hold_opd.integrationTimes_s/60, hold_opd.totalDV_sum_mps, 'LineWidth', 1.5);
+% xlabel('Integration time [min]');
+% ylabel('Estimated total formation \DeltaV [m/s]');
+% title('Science Hold Delta-V (sum across collectors)');
+% grid on
 
 chief.u = xc(:,6);
 
 opts = struct();
 opts.step = 10;
 opts.showPlane = true;
-opts.pauseTime = 0.01;
+opts.pauseTime = 0.02;
 opts.trailLength = 30;
 
 animate_formation_star_plane(t, out, chief, [phi0 beta], 'phibeta', opts);
