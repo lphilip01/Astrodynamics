@@ -36,9 +36,9 @@ That0 = [-sin(RAAN)*cos(inc);
           cos(RAAN)*cos(inc);
           sin(inc)];
 
-Nhat0 = [ sin(RAAN)*sin(inc);
-         -cos(RAAN)*sin(inc);
-          cos(inc)];
+Nhat0 = [ -sin(RAAN)*sin(inc);
+         cos(RAAN)*sin(inc);
+          -cos(inc)];
 
 % Star in RTN at ascending node
 sR = dot(sI, Rhat0);

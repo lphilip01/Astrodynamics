@@ -65,6 +65,27 @@ rSunTab  = params.ephem.rSun;   % Nt x 3
 rMoonTab = params.ephem.rMoon;  % Nt x 3
 
 % =========================================================================
+% Compile CasADi RK4 Function 
+% =========================================================================
+fprintf('  Compiling RK4 CasADi Function...');
+x_cas    = casadi.MX.sym('x',    7);
+u_cas    = casadi.MX.sym('u',    3);
+rSun_cas = casadi.MX.sym('rSun', 3);
+rMoon_cas= casadi.MX.sym('rMoon',3);
+ 
+f1 = scienceHold_QNS_dynamics_casadi(x_cas,              u_cas, params, rSun_cas, rMoon_cas);
+f2 = scienceHold_QNS_dynamics_casadi(x_cas + 0.5*h*f1,   u_cas, params, rSun_cas, rMoon_cas);
+f3 = scienceHold_QNS_dynamics_casadi(x_cas + 0.5*h*f2,   u_cas, params, rSun_cas, rMoon_cas);
+f4 = scienceHold_QNS_dynamics_casadi(x_cas + h*f3,       u_cas, params, rSun_cas, rMoon_cas);
+xnext_expr = x_cas + (h/6)*(f1 + 2*f2 + 2*f3 + f4);
+ 
+F_rk4 = casadi.Function('F_rk4', ...
+    {x_cas, u_cas, rSun_cas, rMoon_cas}, ...
+    {xnext_expr}, ...
+    {'x','u','rSun','rMoon'}, {'xnext'});
+fprintf(' done.\n');
+
+% =========================================================================
 % Build a dynamically consistent initial guess (zero control propagation)
 % =========================================================================
 XguessCell = cell(1,Nc);
@@ -97,7 +118,7 @@ end
 % Phase 1 solve
 % =========================================================================
 phase1 = build_and_solve_phase( ...
-    'phase1', tGrid, xc, deputyInitCell, params, target, prob, ...
+    'phase1', tGrid, xc, deputyInitCell, params, target, prob, F_rk4,...
     XguessCell, UguessCell, ...
     prob.phase1ConstraintStride, ...
     prob.phase1_wSlack, 0, 0, prob.phase1_wSmooth);
@@ -110,7 +131,7 @@ end
 % Phase 2 solve (full constraints, warm start)
 % =========================================================================
 phase2 = build_and_solve_phase( ...
-    'phase2', tGrid, xc, deputyInitCell, params, target, prob, ...
+    'phase2', tGrid, xc, deputyInitCell, params, target, prob, F_rk4, ...
     phase1.X, phase1.U, ...
     1, ...
     prob.phase2_wSlack, prob.phase2_wFuel, prob.phase2_wControl, prob.phase2_wSmooth);
@@ -125,7 +146,7 @@ sol.phase2 = phase2;
 end
 
 % =========================================================================
-function sol = build_and_solve_phase(phaseName, tGrid, chiefHist, deputyInitCell, params, target, prob, ...
+function sol = build_and_solve_phase(phaseName, tGrid, chiefHist, deputyInitCell, params, target, prob, F_rk4,...
                                      XinitCell, UinitCell, constraintStride, wSlack, wFuel, wControl, wSmooth)
 
 import casadi.*
@@ -163,25 +184,18 @@ for j = 1:Nc
 end
 
 % -------------------------------------------------------------------------
-% Dynamics constraints
+% Dynamics constraints  <-- uses compiled F_rk4, O(N) graph construction
 % -------------------------------------------------------------------------
 for k = 1:Nint
-    rSun_mid  = 0.5 * (rSunTab(k,:).'  + rSunTab(k+1,:).');
-    rMoon_mid = 0.5 * (rMoonTab(k,:).' + rMoonTab(k+1,:).');
-
+    rSm = 0.5*(rSunTab(k,:).'  + rSunTab(k+1,:).');
+    rMm = 0.5*(rMoonTab(k,:).' + rMoonTab(k+1,:).');
+ 
     for j = 1:Nc
-        xk = X{j}(:,k);
-        uk = U{j}(:,k);
-
-        f1 = scienceHold_QNS_dynamics_casadi(xk,            uk, params, rSun_mid, rMoon_mid);
-        f2 = scienceHold_QNS_dynamics_casadi(xk + 0.5*h*f1, uk, params, rSun_mid, rMoon_mid);
-        f3 = scienceHold_QNS_dynamics_casadi(xk + 0.5*h*f2, uk, params, rSun_mid, rMoon_mid);
-        f4 = scienceHold_QNS_dynamics_casadi(xk + h*f3,     uk, params, rSun_mid, rMoon_mid);
-
-        xnext = xk + (h/6)*(f1 + 2*f2 + 2*f3 + f4);
+        xnext = F_rk4(X{j}(:,k), U{j}(:,k), rSm, rMm);
         opti.subject_to(X{j}(:,k+1) == xnext);
     end
 end
+
 
 % -------------------------------------------------------------------------
 % Control and mass bounds
@@ -191,6 +205,8 @@ for j = 1:Nc
         opti.subject_to(sumsqr(U{j}(:,k)) <= 1.0);
     end
     opti.subject_to(vec(X{j}(7,:).') >= prob.massDry_kg);
+    % This directly enforces physical propellant conservation
+    opti.subject_to(X{j}(7,2:end) <= X{j}(7,1:end-1));
 
 end
 
@@ -253,6 +269,7 @@ for k = 1:constraintStride:Nt
     for j = 1:Nc
         opti.subject_to(opd_k(j) - opdMean <=  Dtol_km + Sopd(j,k));
         opti.subject_to(opd_k(j) - opdMean >= -Dtol_km - Sopd(j,k));
+        
     end
 
     % Baseline preservation
@@ -566,9 +583,9 @@ That = [ -cO*su - sO*cu*ci;
          -sO*su + cO*cu*ci;
           cu*si ];
 
-Nhat = [ sO*si;
-        -cO*si;
-         ci ];
+Nhat = [-sO*si;
+        cO*si;
+         -ci ];
 
 sRTN = [dot(sI,Rhat);
         dot(sI,That);

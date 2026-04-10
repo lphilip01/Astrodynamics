@@ -54,9 +54,9 @@ That = [ -cO*su - sO*cu*ci;
          -sO*su + cO*cu*ci;
           cu*si ];
 
-Nhat = [ sO*si;
-        -cO*si;
-         ci ];
+Nhat = [ -sO*si;
+        cO*si;
+         -ci ];
 
 r_sat = r * Rhat;
 
@@ -120,10 +120,11 @@ ey_dot   = (1/(n*a)) * ( -cos(u)*AR + 2*sin(u)*AT );
 inc_dot  = (1/(n*a)) * cos(u) * AN;
 RAAN_dot = (1/(n*a*sin_i_safe)) * sin(u) * AN;
 
-% Smoothed norm for mass rate
-eps_th = 1e-10;
-throttle = sqrt(vR^2 + vT^2 + vN^2 + eps_th) - sqrt(eps_th);
-m_dot = -(T * throttle) / (Isp * g0);
+% Smooth non-negative throttle: always >= 0, smooth derivative everywhere
+eps_th   = 1e-10;
+norm_sq  = vR^2 + vT^2 + vN^2;
+throttle = sqrt(norm_sq + eps_th^2) - eps_th;   % always >= 0
+m_dot    = -(T * throttle) / (Isp * g0);
 
 xdot = [a_dot; ex_dot; ey_dot; inc_dot; RAAN_dot; u_dot; m_dot];
 end

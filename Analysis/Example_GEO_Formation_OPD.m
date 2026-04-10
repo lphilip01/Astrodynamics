@@ -1,4 +1,4 @@
-function [out, sol]=Example_GEO_Formation_OPD
+function [out, sol]=Example_GEO_Formation_OPD(ra,dec,rho_m,Tint_s,Asc,mc,Asd,md,T,dmax)
 % Example_GEO_Linear_OPD
 %
 % End-to-end STARI validation example using the full OPD-rate pipeline:
@@ -44,27 +44,14 @@ xc0 = [a0; ex0; ey0; inc0; RAAN0; u0];
 % Target geometry
 %% ------------------------------------------------------------------------
 
-tau_ceti_ra=0.4600;
-tau_ceti_dec = -0.2781;
-
-altair_ra=5.1832;
-altair_dec=0.1548;
-
-deneb_ra=5.403;
-deneb_dec=0.800;
 
 
-[phi0, beta, sRTN0] = radec_to_phibeta(altair_ra, altair_dec, RAAN0, inc0);
+[phi0, beta, sRTN0] = radec_to_phibeta(ra, dec, RAAN0, inc0);
 
-
-% STARI: delta_lambda = 100 m
-delta_lambda_m  = 1000;            % m
-delta_lambda_km = delta_lambda_m / 1000;
-delta_lambda    = delta_lambda_km / a0;   % dimensionless ROE form
 
 % Only one deputy described here out of 3, other deputies have gamma +
 % 2*pi/3 and 4*pi/3
- rho=1000/1000;
+ rho=rho_m/1000;
  gamma=2*pi/3;
  delta_ex = rho*(cos(gamma)*sin(phi0)+sin(gamma)*sin(beta)*cos(phi0));
  delta_ey = -(rho/2)*(cos(gamma)*cos(phi0)-sin(gamma)*sin(beta)*sin(phi0));
@@ -105,13 +92,13 @@ delta_lambda    = delta_lambda_km / a0;   % dimensionless ROE form
  roe03(5) = 0.0;
  roe03(6) = delta_iy3/a0;
 
-fprintf('Initial GEO ROE d1:\n');
-fprintf('delta_a      = %.6e\n', roe0(1));
-fprintf('delta_lambda = %.6e\n', roe0(2));
-fprintf('delta_ex     = %.6e\n', roe0(3));
-fprintf('delta_ey     = %.6e\n', roe0(4));
-fprintf('delta_ix     = %.6e\n', roe0(5));
-fprintf('delta_iy     = %.6e\n', roe0(6));
+% fprintf('Initial GEO ROE d1:\n');
+% fprintf('delta_a      = %.6e\n', roe0(1));
+% fprintf('delta_lambda = %.6e\n', roe0(2));
+% fprintf('delta_ex     = %.6e\n', roe0(3));
+% fprintf('delta_ey     = %.6e\n', roe0(4));
+% fprintf('delta_ix     = %.6e\n', roe0(5));
+% fprintf('delta_iy     = %.6e\n', roe0(6));
 
 % fprintf('Initial STARI ROE d2:\n');
 % fprintf('delta_a      = %.6e\n', roe02(1));
@@ -135,8 +122,8 @@ paramsChief.J2      = J2;
 paramsChief.muMoon  = 4903;          % km^3/s^2 
 paramsChief.muSun   = 132712;     % km^3/s^2 
 paramsChief.CR      = 2; %2
-paramsChief.As      = 3;           % m^2 3
-paramsChief.m       = 400;           % kg 400
+paramsChief.As      = Asc;           % m^2 3
+paramsChief.m       = mc;           % kg 400
 paramsChief.S       = 1367;          % W/m^2 1367
 paramsChief.c       = 2.998e8;       % m/s
 paramsChief.jd0     = juliandate(datetime(2026,1,1,0,0,0));
@@ -144,16 +131,16 @@ paramsChief.ephemModel = '421';
 paramsChief.useShadow = true;
 
 paramsDeputy = paramsChief;
-paramsDeputy.As=3;
-paramsDeputy.m=400;
+paramsDeputy.As=Asd;
+paramsDeputy.m=md;
 
 paramsDeputy2 = paramsChief;
-paramsDeputy2.As=3;
-paramsDeputy2.m=400;
+paramsDeputy2.As=Asd;
+paramsDeputy2.m=md;
 
 paramsDeputy3 = paramsChief;
-paramsDeputy3.As=3;
-paramsDeputy3.m=400;
+paramsDeputy3.As=Asd;
+paramsDeputy3.m=md;
 
 %% ------------------------------------------------------------------------
 % Time span: 5 orbits
@@ -181,7 +168,6 @@ opts = odeset('RelTol',1e-10,'AbsTol',1e-10,'InitialStep',T0/1000);
 [~, xd2] = ode45(@(t,x) rates_qns_total(t,x,paramsDeputy2), tspan, xd0{2}, opts);
 [~, xd3] = ode45(@(t,x) rates_qns_total(t,x,paramsDeputy3), tspan, xd0{3}, opts);
 
-out.t=t;
 %% ------------------------------------------------------------------------
 % Full OPD-rate pipeline
 %% ------------------------------------------------------------------------
@@ -189,27 +175,32 @@ out = opd_pipeline_from_qns( ...
     t, xc, {xd,xd2,xd3}, ...
     paramsChief, {paramsDeputy,paramsDeputy2, paramsDeputy3}, ...
     'phibeta', [phi0 beta]);
-
+out.t=t;
+xdCell={xd,xd2,xd3};
+out.states.chief=xc;
+out.states.deputies=xdCell;
+out.star.phi0=phi0;
+out.star.beta=beta;
+out.star.ra=ra;
+out.star.dec=dec;
 % Suppose you already selected a science-hold start index k0
 % and extracted chief and deputy states over the desired hold interval:
 if optimize
-xdCell={xd,xd2,xd3};
 
-
-
-
-[kStart, info] = find_science_hold_start(out, 5, 'bestlocal');
+[kStart, info] = find_science_hold_start(out, 5, 'bestLocal');
 
 k0 = kStart;
-Tint = 60*60;   % 30 min
+Tint = Tint_s;   % 60 min
 t0 = t(k0);
-tHold = linspace(0, Tint, 200).';
+h_ocp = 60;
+Npts  = max(round(Tint/h_ocp) + 1, 30);
+tHold = linspace(0, Tint, Npts).';
 
 % Interpolate chief onto hold grid
 chiefHold = interp1(t - t0, xc, tHold, 'linear');
 
 % Build deputy initial state cell (append mass)
-m0 = 200; % kg
+m0 = md; % kg
 depInit = cell(1,3);
 for j = 1:3
     x0j = interp1(t - t0, xdCell{j}, 0, 'linear').';
@@ -217,7 +208,7 @@ for j = 1:3
 end
 
 paramsOCP = paramsDeputy;
-paramsOCP.T   = 0.02;   % N
+paramsOCP.T   = T;   % N
 paramsOCP.Isp = 1500;   % s
 
 % Ephemerides over hold grid
@@ -229,11 +220,11 @@ target.type = 'phibeta';
 target.phi0 = phi0;
 target.beta = beta;
 
-prob.Dmax_m = 5;
-prob.rhoMin_km = .8;       % keep collectors far from combiner
-prob.rhoMax_km = 1.2;       % optional
-prob.dPairMin_km = 0.5;     % pairwise min spacing
-prob.massDry_kg = 180;
+prob.Dmax_m = dmax;
+prob.rhoMin_km = .8*rho;       % keep collectors far from combiner
+prob.rhoMax_km = 1.2*rho;       % optional
+prob.dPairMin_km = 0.5*rho;     % pairwise min spacing
+prob.massDry_kg = .9*md;
 prob.wControl = 1e-3;
 prob.wSmooth  = 1e-2;
 
