@@ -1,6 +1,7 @@
 out2=out;
 phi0=out2.star.phi0;
 beta=out2.star.beta;
+t=out.t;
 
 [kStart, info] = find_science_hold_start(out2, 5, 'bestLocal');
 
@@ -45,7 +46,6 @@ t = [out2.t(1:kStart); new_sol_t'];
 opts = struct();
 opts.step = 10;
 opts.showPlane = true;
-opts.pauseTime = 0.02;
 opts.trailLength = 30;
 
 animate_formation_star_plane(t, out2, chief, [phi0 beta], 'phibeta', opts);

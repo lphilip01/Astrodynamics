@@ -146,7 +146,7 @@ paramsDeputy3.m=md;
 % Time span: 5 orbits
 %% ------------------------------------------------------------------------
 T0 = 2*pi*sqrt(a0^3/mu);
-nOrbits = 2;
+nOrbits = 3;
 tf = nOrbits * T0;
 
 nout  = 3000;
@@ -277,15 +277,7 @@ opts.verbose = true;
 % title('Science Hold Delta-V (sum across collectors)');
 % grid on
 
-chief.u = xc(:,6);
 
-opts = struct();
-opts.step = 10;
-opts.showPlane = true;
-opts.pauseTime = 0.02;
-opts.trailLength = 30;
-
-animate_formation_star_plane(t, out, chief, [phi0 beta], 'phibeta', opts);
 end
 
 metrics = formation_opd_metrics(out);

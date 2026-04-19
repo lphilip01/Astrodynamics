@@ -10,7 +10,7 @@ params.J2      = J2;
 params.muMoon  = 4903;          % km^3/s^2
 params.muSun   = 132.712e9;     % km^3/s^2
 params.CR      = 2;
-params.As      = 2.0;           % m^2
+params.As      = 4.0;           % m^2
 params.m       = 100;           % kg
 params.S       = 1367;          % W/m^2
 params.c       = 2.998e8;       % m/s
@@ -25,7 +25,7 @@ params.jd0     = juliandate(datetime(2024,1,1,0,0,0));
 % Example near-circular initial state
 a0    = RE + 35786;      % km
 e0    = 1e-4;
-inc0  = 1e-4*deg;
+inc0  = 7*deg;
 RAAN0 = 0;
 w0    = 0;
 M0    = 0;

@@ -1,7 +1,8 @@
 function out = qns_perturbation_breakdown(t, x, params)
 % qns_perturbation_breakdown
 %
-% Returns per-perturbation RTN accelerations and QNS element rates.
+% Returns per-perturbation RTN accelerations and QNS element rates. Assumes
+% circular orbit
 %
 % State:
 %   x = [a; ex; ey; inc; RAAN; u]
