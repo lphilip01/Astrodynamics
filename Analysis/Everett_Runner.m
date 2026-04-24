@@ -13,7 +13,7 @@ T    = 0.02; %thrust in Newtons
 dmax = 5; %max optical delay line
 
 % Sweep vectors
-rho_m  = 500;          % circumradius to deputies m
+rho_m  = 1000;          % circumradius to deputies m
 Tint_s = 180*60;     % integration time s
 
 % Area-to-mass ratios: fix mass, vary area

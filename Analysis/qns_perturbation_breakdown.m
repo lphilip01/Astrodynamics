@@ -78,9 +78,9 @@ That = [ -cO*su - sO*cu*ci;
          -sO*su + cO*cu*ci;
           cu*si ];
 
-Nhat = [ -sO*si;
-        cO*si;
-         -ci ];
+Nhat = [ sO*si;
+        -cO*si;
+         ci ];
 
 r_sat = r * Rhat;
 

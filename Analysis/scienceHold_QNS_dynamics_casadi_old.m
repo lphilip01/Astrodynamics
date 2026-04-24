@@ -1,7 +1,7 @@
-function xdot = scienceHold_QNS_dynamics_casadi(x, vctrl, params, rSun, rMoon)
+function xdot = scienceHold_QNS_dynamics_casadi_old(x, vctrl, params, rSun, rMoon)
 % scienceHold_QNS_dynamics_casadi
 %
-% CasADi-compatible QNS dynamics for a single spacecraft with:
+% CasADi-compatible QNS dynamics for one collector satellite with:
 %   - J2
 %   - SRP
 %   - lunar gravity
@@ -13,25 +13,19 @@ function xdot = scienceHold_QNS_dynamics_casadi(x, vctrl, params, rSun, rMoon)
 %
 % Control:
 %   vctrl = [vR; vT; vN], with norm(vctrl) <= 1
-%
-% Notes:
-%   - "params" is expected to contain spacecraft-specific propulsion and
-%     area properties when used inside a multi-spacecraft OCP.
-%   - The function remains compatible with the previous single-parameter
-%     struct interface.
 
-mu     = local_get_param(params, 'mu', 0);
-RE     = local_get_param(params, 'RE', 0);
-J2     = local_get_param(params, 'J2', 0);
-muMoon = local_get_param(params, 'muMoon', 0);
-muSun  = local_get_param(params, 'muSun', 0);
-CR     = local_get_param(params, 'CR', 0);
-As     = local_get_param(params, 'As', 0);
-S      = local_get_param(params, 'S', 0);
-c      = local_get_param(params, 'c', 299792458);
-T      = local_get_param(params, 'T', 0);
-Isp    = local_get_param(params, 'Isp', inf);
-g0     = local_get_param(params, 'g0', 9.80665);
+mu     = params.mu;
+RE     = params.RE;
+J2     = params.J2;
+muMoon = params.muMoon;
+muSun  = params.muSun;
+CR     = params.CR;
+As     = params.As;
+S      = params.S;
+c      = params.c;
+T      = params.T;
+Isp    = params.Isp;
+g0     = 9.80665;
 
 a    = x(1);
 ex   = x(2); %#ok<NASGU>
@@ -61,7 +55,7 @@ That = [ -cO*su - sO*cu*ci;
           cu*si ];
 
 Nhat = [ -sO*si;
-          cO*si;
+        cO*si;
          -ci ];
 
 r_sat = r * Rhat;
@@ -83,7 +77,7 @@ else
     AN_SRP = -pSR * dot(s_hat, Nhat);
 end
 
-% Moon gravity
+% Moon
 if muMoon == 0
     AR_Moon = 0; AT_Moon = 0; AN_Moon = 0;
 else
@@ -108,12 +102,7 @@ else
 end
 
 % Thrust
-if T == 0
-    athrust = 0;
-else
-    athrust = (T / m) / 1000;   % km/s^2
-end
-
+athrust = (T / m) / 1000;   % km/s^2
 AR_th = athrust * vR;
 AT_th = athrust * vT;
 AN_th = athrust * vN;
@@ -134,21 +123,8 @@ RAAN_dot = (1/(n*a*sin_i_safe)) * sin(u) * AN;
 % Smooth non-negative throttle: always >= 0, smooth derivative everywhere
 eps_th   = 1e-10;
 norm_sq  = vR^2 + vT^2 + vN^2;
-throttle = sqrt(norm_sq + eps_th^2) - eps_th;
-
-if (T == 0) || ~isfinite(Isp) || (Isp <= 0)
-    m_dot = 0;
-else
-    m_dot = -(T * throttle) / (Isp * g0);
-end
+throttle = sqrt(norm_sq + eps_th^2) - eps_th;   % always >= 0
+m_dot    = -(T * throttle) / (Isp * g0);
 
 xdot = [a_dot; ex_dot; ey_dot; inc_dot; RAAN_dot; u_dot; m_dot];
-end
-
-function value = local_get_param(params, name, defaultValue)
-if isfield(params, name) && ~isempty(params.(name))
-    value = params.(name);
-else
-    value = defaultValue;
-end
 end

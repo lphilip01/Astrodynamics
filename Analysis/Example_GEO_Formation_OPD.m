@@ -52,17 +52,17 @@ xc0 = [a0; ex0; ey0; inc0; RAAN0; u0];
 % Only one deputy described here out of 3, other deputies have gamma +
 % 2*pi/3 and 4*pi/3
  rho=rho_m/1000;
- gamma=2*pi/3;
+ gamma=2*pi/3 +pi/4;
  delta_ex = rho*(cos(gamma)*sin(phi0)+sin(gamma)*sin(beta)*cos(phi0));
  delta_ey = -(rho/2)*(cos(gamma)*cos(phi0)-sin(gamma)*sin(beta)*sin(phi0));
  delta_iy = -rho*sin(gamma)*cos(beta);
 
-  gamma=4*pi/3;
+  gamma=4*pi/3+pi/4;
  delta_ex2 = rho*(cos(gamma)*sin(phi0)+sin(gamma)*sin(beta)*cos(phi0));
  delta_ey2 = -(rho/2)*(cos(gamma)*cos(phi0)-sin(gamma)*sin(beta)*sin(phi0));
  delta_iy2 = -rho*sin(gamma)*cos(beta);
 
-  gamma=6*pi/3;
+  gamma=6*pi/3+pi/4;
  delta_ex3 = rho*(cos(gamma)*sin(phi0)+sin(gamma)*sin(beta)*cos(phi0));
  delta_ey3 = -(rho/2)*(cos(gamma)*cos(phi0)-sin(gamma)*sin(beta)*sin(phi0));
  delta_iy3 = -rho*sin(gamma)*cos(beta);
@@ -92,22 +92,30 @@ xc0 = [a0; ex0; ey0; inc0; RAAN0; u0];
  roe03(5) = 0.0;
  roe03(6) = delta_iy3/a0;
 
-% fprintf('Initial GEO ROE d1:\n');
-% fprintf('delta_a      = %.6e\n', roe0(1));
-% fprintf('delta_lambda = %.6e\n', roe0(2));
-% fprintf('delta_ex     = %.6e\n', roe0(3));
-% fprintf('delta_ey     = %.6e\n', roe0(4));
-% fprintf('delta_ix     = %.6e\n', roe0(5));
-% fprintf('delta_iy     = %.6e\n', roe0(6));
+ fprintf('Initial GEO ROE d1:\n');
+ fprintf('delta_a      = %.6e\n', roe0(1));
+ fprintf('delta_lambda = %.6e\n', roe0(2));
+ fprintf('delta_ex     = %.6e\n', roe0(3));
+ fprintf('delta_ey     = %.6e\n', roe0(4));
+ fprintf('delta_ix     = %.6e\n', roe0(5));
+ fprintf('delta_iy     = %.6e\n', roe0(6));
 
-% fprintf('Initial STARI ROE d2:\n');
-% fprintf('delta_a      = %.6e\n', roe02(1));
-% fprintf('delta_lambda = %.6e\n', roe02(2));
-% fprintf('delta_ex     = %.6e\n', roe02(3));
-% fprintf('delta_ey     = %.6e\n', roe02(4));
-% fprintf('delta_ix     = %.6e\n', roe02(5));
-% fprintf('delta_iy     = %.6e\n', roe02(6));
+ fprintf('Initial STARI ROE d2:\n');
+ fprintf('delta_a      = %.6e\n', roe02(1));
+ fprintf('delta_lambda = %.6e\n', roe02(2));
+ fprintf('delta_ex     = %.6e\n', roe02(3));
+ fprintf('delta_ey     = %.6e\n', roe02(4));
+ fprintf('delta_ix     = %.6e\n', roe02(5));
+ fprintf('delta_iy     = %.6e\n', roe02(6));
 
+  fprintf('Initial STARI ROE d2:\n');
+ fprintf('delta_a      = %.6e\n', roe02(1));
+ fprintf('delta_lambda = %.6e\n', roe02(2));
+ fprintf('delta_ex     = %.6e\n', roe02(3));
+ fprintf('delta_ey     = %.6e\n', roe02(4));
+ fprintf('delta_ix     = %.6e\n', roe02(5));
+ fprintf('delta_iy     = %.6e\n', roe02(6));
+ 
 %% ------------------------------------------------------------------------
 % Build deputy initial QNS state from chief + ROE
 %% ------------------------------------------------------------------------
