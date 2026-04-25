@@ -14,7 +14,7 @@ dmax = 5; %max optical delay line
 
 % Sweep vectors
 rho_m  = 1000;          % circumradius to deputies m
-Tint_s = 180*60;     % integration time s
+Tint_s = 300*60;     % integration time s
 
 % Area-to-mass ratios: fix mass, vary area
 am_ratio_c = 0.003;        % m^2/kg

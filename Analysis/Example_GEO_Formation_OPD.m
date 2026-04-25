@@ -197,7 +197,7 @@ if optimize
 
 [kStart, info] = find_science_hold_start(out, 5, 'bestLocal');
 
-k0 = kStart;
+k0 = kStart-3;
 Tint = Tint_s;   % 60 min
 t0 = t(k0);
 h_ocp = 60;
