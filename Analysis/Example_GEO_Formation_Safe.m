@@ -1,4 +1,4 @@
-function [out, sol]=Example_GEO_Formation_OPD(ra,dec,rho_m,Tint_s,Asc,mc,Asd,md,T,dmax)
+function [out]=Example_GEO_Formation_Safe(rho_m)
 % Example_GEO_Linear_OPD
 %
 % End-to-end STARI validation example using the full OPD-rate pipeline:
@@ -15,7 +15,7 @@ function [out, sol]=Example_GEO_Formation_OPD(ra,dec,rho_m,Tint_s,Asc,mc,Asd,md,
 close all; clc;
 
 plot_figs=0;
-optimize=1;
+optimize=0;
 %% ------------------------------------------------------------------------
 % Constants
 %% ------------------------------------------------------------------------
@@ -44,7 +44,8 @@ xc0 = [a0; ex0; ey0; inc0; RAAN0; u0];
 % Target geometry
 %% ------------------------------------------------------------------------
 
-
+ra  = 0.4600;
+dec = -0.2781;
 
 [phi0, beta, sRTN0] = radec_to_phibeta(ra, dec, RAAN0, inc0);
 
@@ -52,20 +53,24 @@ xc0 = [a0; ex0; ey0; inc0; RAAN0; u0];
 % Only one deputy described here out of 3, other deputies have gamma +
 % 2*pi/3 and 4*pi/3
  rho=rho_m/1000;
- gamma=2*pi/3 +pi/4;
- delta_ex = rho*(cos(gamma)*sin(phi0)+sin(gamma)*sin(beta)*cos(phi0));
- delta_ey = -(rho/2)*(cos(gamma)*cos(phi0)-sin(gamma)*sin(beta)*sin(phi0));
- delta_iy = -rho*sin(gamma)*cos(beta);
+ phi0_hold=0;
+ phi = phi0_hold + 2*pi/3;
+ delta_ex = rho*cos(phi);
+ delta_ey = rho*sin(phi);
+ delta_ix = rho*cos(phi);
+ delta_iy = rho*sin(phi);
 
-  gamma=4*pi/3+pi/4;
- delta_ex2 = rho*(cos(gamma)*sin(phi0)+sin(gamma)*sin(beta)*cos(phi0));
- delta_ey2 = -(rho/2)*(cos(gamma)*cos(phi0)-sin(gamma)*sin(beta)*sin(phi0));
- delta_iy2 = -rho*sin(gamma)*cos(beta);
+ phi = phi0_hold + 4*pi/3;
+ delta_ex2 = rho*cos(phi);
+ delta_ey2 = rho*sin(phi);
+ delta_ix2 = rho*cos(phi);
+ delta_iy2 = rho*sin(phi);
 
-  gamma=6*pi/3+pi/4;
- delta_ex3 = rho*(cos(gamma)*sin(phi0)+sin(gamma)*sin(beta)*cos(phi0));
- delta_ey3 = -(rho/2)*(cos(gamma)*cos(phi0)-sin(gamma)*sin(beta)*sin(phi0));
- delta_iy3 = -rho*sin(gamma)*cos(beta);
+ phi = phi0_hold + 6*pi/3;
+ delta_ex3 = rho*cos(phi);
+ delta_ey3 = rho*sin(phi);
+ delta_ix3 = rho*cos(phi);
+ delta_iy3 = rho*sin(phi);
 
 % Initial ROE from attached STARI relation
  roe0 = zeros(6,1);
@@ -73,7 +78,7 @@ xc0 = [a0; ex0; ey0; inc0; RAAN0; u0];
  roe0(2) = 0.0;
  roe0(3) = delta_ex/a0;
  roe0(4) = delta_ey/a0;
- roe0(5) = 0.0;
+ roe0(5) = delta_ix/a0;
  roe0(6) = delta_iy/a0;
 
  roe02 = zeros(6,1);
@@ -81,7 +86,7 @@ xc0 = [a0; ex0; ey0; inc0; RAAN0; u0];
  roe02(2) = 0.0;
  roe02(3) = delta_ex2/a0;
  roe02(4) = delta_ey2/a0;
- roe02(5) = 0.0;
+ roe02(5) = delta_ix2/a0;
  roe02(6) = delta_iy2/a0;
 
  roe03 = zeros(6,1);
@@ -89,7 +94,7 @@ xc0 = [a0; ex0; ey0; inc0; RAAN0; u0];
  roe03(2) = 0.0;
  roe03(3) = delta_ex3/a0;
  roe03(4) = delta_ey3/a0;
- roe03(5) = 0.0;
+ roe03(5) = delta_ix3/a0;
  roe03(6) = delta_iy3/a0;
 
  fprintf('Initial GEO ROE d1:\n');
@@ -130,31 +135,33 @@ paramsChief.J2      = J2;
 paramsChief.muMoon  = 4903;          % km^3/s^2 
 paramsChief.muSun   = 132712;     % km^3/s^2 
 paramsChief.CR      = 2; %2
-paramsChief.As      = Asc;           % m^2 3
-paramsChief.m       = mc;           % kg 400
+paramsChief.As      = 3;           % m^2 3
+paramsChief.m       = 400;           % kg 400
 paramsChief.S       = 1367;          % W/m^2 1367
 paramsChief.c       = 2.998e8;       % m/s
 paramsChief.jd0     = juliandate(datetime(2026,1,1,0,0,0));
 paramsChief.ephemModel = '421';
 paramsChief.useShadow = true;
 
+
+
 paramsDeputy = paramsChief;
-paramsDeputy.As=Asd;
-paramsDeputy.m=md;
+paramsDeputy.As=3;
+paramsDeputy.m=300;
 
 paramsDeputy2 = paramsChief;
-paramsDeputy2.As=Asd;
-paramsDeputy2.m=md;
+paramsDeputy2.As=3;
+paramsDeputy2.m=300;
 
 paramsDeputy3 = paramsChief;
-paramsDeputy3.As=Asd;
-paramsDeputy3.m=md;
+paramsDeputy3.As=3;
+paramsDeputy3.m=300;
 
 %% ------------------------------------------------------------------------
-% Time span: 5 orbits
+% Time span: 10 orbits
 %% ------------------------------------------------------------------------
 T0 = 2*pi*sqrt(a0^3/mu);
-nOrbits = 3;
+nOrbits = 100;
 tf = nOrbits * T0;
 
 nout  = 3000;
@@ -259,9 +266,9 @@ hold off
 figure();plot(t./(60*60),out.opd{1}.*1000,'DisplayName','Collector 1');hold on; plot(t./(60*60),out.opd{2}.*1000,'DisplayName', 'Collector 2');plot(t./(60*60),out.opd{3}.*1000,'DisplayName', 'Collector 3');legend();title("OPD for Collector Satellites");ylabel("OPD (m)");xlabel("time");yline(0);
 
 figure();plot(t./(60*60),out.opd{1}.*1000 + out.opd{2}.*1000+out.opd{3}.*1000,'DisplayName','Combined OPD');legend();title("OPD for Collector Satellites");ylabel("OPD (m)");xlabel("time");yline(0);
-
+if optimize
 figure();plot3(sol.RTN{1}(:,2).*1000,sol.RTN{1}(:,3).*1000,sol.RTN{1}(:,1).*1000,'DisplayName','Collector 1');hold on; plot3(sol.RTN{2}(:,2).*1000,sol.RTN{2}(:,3).*1000,sol.RTN{2}(:,1).*1000,'DisplayName','Collector 2');plot3(sol.RTN{3}(:,2).*1000,sol.RTN{3}(:,3).*1000,sol.RTN{3}(:,1).*1000,'DisplayName','Collector 3');legend();title("RTN for Collector Satellites");ylabel("Normal Position");xlabel("Tangential position");zlabel("Radial position");
-
+end
 opts = struct();
 opts.Dmax_m = 5;
 opts.integrationTimes_s = [300 600 900 1200 1800 3600];

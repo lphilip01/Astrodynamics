@@ -1,4 +1,4 @@
-function sol = solve_science_hold_ocp_old(tGrid, chiefHist, deputyInitCell, params, target, prob)
+function sol = solve_science_hold_ocp(tGrid, chiefHist, deputyInitCell, params, target, prob)
 % solve_science_hold_ocp
 %
 % Fixed-duration science-hold OCP for N collector satellites around a
