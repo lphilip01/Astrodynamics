@@ -1,12 +1,12 @@
 function [sun_unit, moon_unit, earth_unit, earth_ang_radius, in_eclipse] = ...
-    compute_exclusion_zones(time, r_sc_eci, params)
+    compute_exclusion_zones(time, r_sc_eci, params,ind)
 
     jd = juliandate(time);
 
 
     % planetEphemeris outputs km (keep everything in km)
-    sun_pos  = params.ephem.rSun.';
-    moon_pos = params.ephem.rMoon.';
+    sun_pos  = params.ephem.rSun(ind,:).';
+    moon_pos = params.ephem.rMoon(ind,:).';
 
     sun_vec  = sun_pos  - r_sc_eci;
     moon_vec = moon_pos - r_sc_eci;

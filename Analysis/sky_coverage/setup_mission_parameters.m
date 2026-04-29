@@ -1,4 +1,4 @@
-function params = setup_mission_parameters()
+function params = setup_mission_parameters(inc,raan)
 
 % Exclusions [deg]
 params.exclusion.earth_margin = 15;
@@ -16,8 +16,8 @@ params.const.mu_sun_km   = 1.32712440018e11;
 params.chief.a_km = 42164;
 params.chief.ex   = 1e-4;
 params.chief.ey   = 0;
-params.chief.i    = deg2rad(5);
-params.chief.RAAN = 0;
+params.chief.i    = deg2rad(inc);
+params.chief.RAAN = deg2rad(raan);
 params.chief.u    = 0;
 
 % Dynamics settings
@@ -30,9 +30,11 @@ params.dyn.ephemModel = '421';
 params.dyn.useShadow  = true;
 
 % Viz
-params.viz.save_figs = false;
-params.viz.fig_dir = 'figures';
-if ~exist(params.viz.fig_dir,'dir'), mkdir(params.viz.fig_dir); end
-params.save=false;
+params.viz.save_figs = true;
+params.viz.fig_dir = strcat('figures_',num2str(inc),'_',num2str(raan));
+if ~exist(params.viz.fig_dir,'dir') 
+    mkdir(params.viz.fig_dir); 
+end
+params.save=true;
 
 end

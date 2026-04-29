@@ -14,19 +14,19 @@ function generate_figures(RA_mesh, DEC_mesh, coverage_count, total_duration, ...
     % Panel B: Maximum Continuous Observation Time
     subplot(2, 2, 2);
     plot_sky_map(RA_mesh, DEC_mesh, metrics.max_continuous_hours, ...
-                'Max Continuous (hours)', [0, prctile(metrics.max_continuous_hours(:), 95)], 'hot');
+                'Max Continuous (hours)', [0, prctile(metrics.max_continuous_hours(:), 95)], 'parula');
     title('(b) Maximum Continuous Observation', 'FontSize', 14, 'FontWeight', 'bold');
     
     % Panel C: Total Observation Time
     subplot(2, 2, 3);
     plot_sky_map(RA_mesh, DEC_mesh, metrics.total_duration_hours, ...
-                'Total Duration (hours)', [0, prctile(metrics.total_duration_hours(:), 95)], 'plasma');
+                'Total Duration (hours)', [0, prctile(metrics.total_duration_hours(:), 95)], 'winter');
     title('(c) Cumulative Observation Time', 'FontSize', 14, 'FontWeight', 'bold');
     
     % Panel D: Sky Access (Binary)
     subplot(2, 2, 4);
     plot_sky_map(RA_mesh, DEC_mesh, double(metrics.ever_visible), ...
-                'Accessible', [0, 1], 'gray');
+                'Accessible', [0, 1], 'sky');
     title('(d) Sky Accessibility Map', 'FontSize', 14, 'FontWeight', 'bold');
     
     sgtitle(sprintf('GEO Interferometer Sky Coverage Analysis (i = %.1f°, Year-Long Analysis)', ...
@@ -99,11 +99,11 @@ function generate_figures(RA_mesh, DEC_mesh, coverage_count, total_duration, ...
     % Ecliptic plane
     ra_ecliptic = 0:1:360;
     dec_ecliptic = 23.44 * sind(ra_ecliptic);  % Simplified
-    plot(ra_ecliptic, dec_ecliptic, 'c--', 'LineWidth', 2, 'DisplayName', 'Ecliptic');
+    plot(ra_ecliptic, dec_ecliptic, 'k--', 'LineWidth', 2, 'DisplayName', 'Ecliptic');
     
     % Galactic plane (very simplified)
     dec_galactic = -29 * ones(size(ra_ecliptic));
-    plot(ra_ecliptic, dec_galactic, 'm--', 'LineWidth', 2, 'DisplayName', 'Galactic Plane');
+    plot(ra_ecliptic, dec_galactic, 'b--', 'LineWidth', 2, 'DisplayName', 'Galactic Plane');
     
     legend('Location', 'southeast');
     title('Sky Coverage with Celestial Reference Planes', 'FontSize', 14, 'FontWeight', 'bold');
@@ -117,31 +117,41 @@ end
 
 %% Helper function for sky map plotting
 function plot_sky_map(RA, DEC, data, clabel, climit, cmap_name)
-    % Plot data on RA/Dec grid with proper formatting
-    
-    % Handle NaN and zero values for better visualization
+    % Plot data on RA/Dec grid with proper formatting.
+    % Works with both unstructured equal-area point clouds (vectors) and
+    % regular meshgrids (matrices) by using scatter for the former.
+
+    RA   = RA(:);
+    DEC  = DEC(:);
+    data = data(:);
+
+    % Suppress zero values below a positive colour floor (mirrors old pcolor logic)
     data_plot = data;
-    data_plot(data_plot == 0 & climit(1) > 0) = NaN;
-    
-    % Create pseudocolor plot
-    pcolor(RA, DEC, data_plot);
-    shading interp;
-    
+    if climit(1) > 0
+        data_plot(data_plot == 0) = NaN;
+    end
+
+    % Marker size: large enough to fill the sky without gaps for ~16k points,
+    % scale down automatically for denser grids
+    N = numel(RA);
+    mk_size = max(2, round(1800 / sqrt(N)));   % empirical: ~14 pt for 16 k pts
+
+    scatter(RA, DEC, mk_size, data_plot, 'filled', 'MarkerEdgeColor', 'none');
+
     % Formatting
     xlabel('Right Ascension (deg)', 'FontSize', 11);
     ylabel('Declination (deg)', 'FontSize', 11);
-    colormap jet
-   cb = colorbar;
+    colormap(gca, cmap_name);
+    cb = colorbar;
     cb.Label.String = clabel;
     cb.Label.FontSize = 11;
     clim(climit);
-    
+
     % Grid and limits
     grid on;
     xlim([0, 360]);
     ylim([-90, 90]);
     set(gca, 'XTick', 0:60:360);
     set(gca, 'YTick', -90:30:90);
-    axis equal tight;
     box on;
 end

@@ -1,8 +1,8 @@
+function metrics=sky_coverage_runner(inc,raan)
 %% sky_coverage_runner.m
-clear; close all; clc;
 
 %% Setup
-params = setup_mission_parameters();
+params = setup_mission_parameters(inc,raan);
 
 t_start = datetime(2026,1,1,0,0,0);
 t_end   = t_start + days(365);
@@ -12,17 +12,13 @@ time_analysis = (t_start:seconds(dt_analysis):t_end).';
 n_times = numel(time_analysis);
 t_sec = seconds(time_analysis - time_analysis(1));
 
-% RA/Dec grid (regular grid so existing metrics/figures work directly)
-ra_grid  = 0:2:358;
-dec_grid = -90:2:90;
-[RA_mesh, DEC_mesh] = meshgrid(ra_grid, dec_grid);
+% Equal-area sky sampling via Fibonacci sphere
+N_targets = 16290; % ~equivalent point density to the 2-deg regular grid (180x91)
+[RA_deg, DEC_deg, target_unit] = generate_equal_area_sky(N_targets);
 
-ra_rad  = deg2rad(RA_mesh(:));
-dec_rad = deg2rad(DEC_mesh(:));
-target_unit = [cos(dec_rad).*cos(ra_rad), ...
-               cos(dec_rad).*sin(ra_rad), ...
-               sin(dec_rad)];
-N_targets = size(target_unit,1);
+% Column vectors used as coordinate labels (replaces RA_mesh / DEC_mesh)
+RA_mesh  = RA_deg(:);
+DEC_mesh = DEC_deg(:);
 
 %% Chief perturbation propagation params (km, s, rad)
 paramsChief.mu      = params.const.mu_earth_km;
@@ -46,7 +42,8 @@ x0 = [params.chief.a_km; params.chief.ex; params.chief.ey; ...
 
 % Precompute ephem for propagation
 paramsChief.ephem = precompute_ephemeris(t_sec, paramsChief);
-params.ephem=paramsChief.ephem;
+params.ephem.rSun = paramsChief.ephem.rSun;  
+params.ephem.rMoon = paramsChief.ephem.rMoon;
 
 T0 = 2*pi*sqrt(params.chief.a_km^3 / paramsChief.mu);
 opts = odeset('RelTol',1e-10,'AbsTol',1e-10,'InitialStep',T0/1000);
@@ -65,15 +62,22 @@ end
 
 %% Coverage computation (vectorized over targets)
 fprintf('Computing sky visibility...\n');
+visibility_history = false(N_targets, n_times);
 
-r_sc_eci = sc_positions_ECI(:,:).';
-[sun_unit, moon_unit, earth_unit, earth_ang_radius, in_eclipse] = ...
-    compute_exclusion_zones(time_analysis, r_sc_eci, params);
+for k = 1:n_times
+    if mod(k,200)==0
+        fprintf('  step %d/%d (%.1f%%)\n', k, n_times, 100*k/n_times);
+    end
 
-% vectorized over all sky targets
-visibility_history = check_target_visibility( ...
-    target_unit, r_sc_eci, sun_unit, moon_unit, earth_unit, ...
-    earth_ang_radius, in_eclipse, params);
+    r_sc_eci = sc_positions_ECI(k,:).';
+    [sun_unit, moon_unit, earth_unit, earth_ang_radius, in_eclipse] = ...
+        compute_exclusion_zones(time_analysis(k), r_sc_eci, params,k);
+
+    % vectorized over all sky targets
+    visibility_history(:,k) = check_target_visibility( ...
+        target_unit, r_sc_eci, sun_unit, moon_unit, earth_unit, ...
+        earth_ang_radius, in_eclipse, params);
+end
 
 %% Per-target statistics
 coverage_count_vec = sum(visibility_history,2);
@@ -97,12 +101,11 @@ for idx = 1:N_targets
     end
 end
 
-%% Reshape to 2D maps for existing metrics/figures functions
-sz = size(RA_mesh);
-coverage_count = reshape(coverage_count_vec, sz);
-total_duration = reshape(total_duration_vec, sz);
-max_continuous = reshape(max_continuous_vec, sz);
-revisit_times  = reshape(revisit_times_vec,  sz);
+%% Pass flat vectors directly (no reshape needed for equal-area sampling)
+coverage_count = coverage_count_vec;
+total_duration = total_duration_vec;
+max_continuous = max_continuous_vec;
+revisit_times  = revisit_times_vec;
 
 %% Metrics + figures (existing pipeline)
 metrics = compute_coverage_metrics(coverage_count, total_duration, ...
@@ -119,10 +122,9 @@ fprintf('Median revisit: %.2f h\n', metrics.median_revisit_hours);
 generate_figures(RA_mesh, DEC_mesh, coverage_count, total_duration, ...
     max_continuous, revisit_times, metrics, params, n_times);
 
-if params.save
-save('sky_coverage_results.mat', ...
+save(strcat('sky_coverage_results_',num2str(inc),'_',num2str(raan),'.mat'), ...
     'metrics','coverage_count','total_duration','max_continuous','revisit_times', ...
     'RA_mesh','DEC_mesh','visibility_history','x_qns', ...
     'sc_positions_ECI','sc_velocities_ECI','time_analysis','params','paramsChief','-v7.3');
-end
 fprintf('\nDone.\n');
+end

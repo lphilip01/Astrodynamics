@@ -22,9 +22,9 @@ function is_visible = check_target_visibility( ...
     earth_keepout = earth_ang_radius + params.exclusion.earth_margin;
 
     % dot-products (vectorized)
-    dE = target_unit * earth_unit;
-    dS = target_unit * sun_unit;
-    dM = target_unit * moon_unit;
+    dE = target_unit * earth_unit(:);
+    dS = target_unit * sun_unit(:);
+    dM = target_unit * moon_unit(:);
 
     % angle > threshold  <=> dot < cos(threshold)
     is_visible = ...
