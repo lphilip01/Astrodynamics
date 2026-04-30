@@ -42,6 +42,8 @@ function sol = solve_science_hold_ocp_throttle_direction(tGrid, chiefHist, deput
 %   prob.alphaFinal               optional terminal throttle constraint
 %   prob.throttleRateMax          optional |d alpha / dt| bound [1/s]
 %   prob.dirRateMax               optional ||d dir / dt|| bound [1/s]
+%   prob.startupRampDuration      optional startup envelope duration [s]
+%   prob.startupThrottleRateMax   optional startup envelope slope [1/s]
 %   prob.initialDirectionRTN      default [0; 1; 0]
 
 import casadi.*
@@ -53,15 +55,17 @@ if ~isfield(prob,'phase1_wSmooth'),         prob.phase1_wSmooth = 1e-4; end
 
 if ~isfield(prob,'phase2_wSlack'),          prob.phase2_wSlack = 1e1; end
 if ~isfield(prob,'phase2_wFuel'),           prob.phase2_wFuel = 1; end
-if ~isfield(prob,'phase2_wControl'),        prob.phase2_wControl = 1e-5; end
-if ~isfield(prob,'phase2_wSmooth'),         prob.phase2_wSmooth = 1e-4; end
+if ~isfield(prob,'phase2_wControl'),        prob.phase2_wControl = 1e-4; end
+if ~isfield(prob,'phase2_wSmooth'),         prob.phase2_wSmooth = 1e-2; end
 
-if ~isfield(prob,'alphaMin'),               prob.alphaMin = 0; end
+if ~isfield(prob,'alphaMin'),               prob.alphaMin = .2; end
 if ~isfield(prob,'alphaMax'),               prob.alphaMax = 1; end
-if ~isfield(prob,'alphaStart'),             prob.alphaStart = 0; end
+if ~isfield(prob,'alphaStart'),             prob.alphaStart = .2; end
 if ~isfield(prob,'alphaFinal'),             prob.alphaFinal = []; end
-if ~isfield(prob,'throttleRateMax'),        prob.throttleRateMax = []; end
-if ~isfield(prob,'dirRateMax'),             prob.dirRateMax = []; end
+if ~isfield(prob,'throttleRateMax'),        prob.throttleRateMax = 1.33e-3; end
+if ~isfield(prob,'dirRateMax'),             prob.dirRateMax = .0457; end
+if ~isfield(prob,'startupRampDuration'),    prob.startupRampDuration = 600; end
+if ~isfield(prob,'startupThrottleRateMax'), prob.startupThrottleRateMax = 1.33e-3; end
 if ~isfield(prob,'initialDirectionRTN'),    prob.initialDirectionRTN = [0; 1; 0]; end
 
 if prob.alphaMin < 0 || prob.alphaMax > 1 || prob.alphaMin > prob.alphaMax
@@ -72,6 +76,12 @@ if prob.alphaStart < prob.alphaMin || prob.alphaStart > prob.alphaMax
 end
 if ~isempty(prob.alphaFinal) && (prob.alphaFinal < prob.alphaMin || prob.alphaFinal > prob.alphaMax)
     error('prob.alphaFinal must satisfy alphaMin <= alphaFinal <= alphaMax.');
+end
+if ~isempty(prob.startupRampDuration) && prob.startupRampDuration < 0
+    error('prob.startupRampDuration must be nonnegative.');
+end
+if ~isempty(prob.startupThrottleRateMax) && prob.startupThrottleRateMax < 0
+    error('prob.startupThrottleRateMax must be nonnegative.');
 end
 
 dir0 = prob.initialDirectionRTN(:);
@@ -227,6 +237,17 @@ else
     dDir_max = prob.dirRateMax * h;
 end
 
+startupEnvelopeActive = ~isempty(prob.startupRampDuration) && prob.startupRampDuration > 0;
+if isempty(prob.startupThrottleRateMax)
+    startupAlphaDotMax = prob.throttleRateMax;
+else
+    startupAlphaDotMax = prob.startupThrottleRateMax;
+end
+if startupEnvelopeActive && isempty(startupAlphaDotMax)
+    error(['Startup throttle envelope requested, but no startup slope is available. ', ...
+           'Set prob.startupThrottleRateMax or prob.throttleRateMax.']);
+end
+
 opti = casadi.Opti();
 
 X = cell(1,Nc);
@@ -271,6 +292,16 @@ for j = 1:Nc
     opti.subject_to(Alpha{j}(1) == prob.alphaStart);
     if ~isempty(prob.alphaFinal)
         opti.subject_to(Alpha{j}(end) == prob.alphaFinal);
+    end
+
+    if startupEnvelopeActive
+        for k = 1:Nint
+            tk = tGrid(k) - tGrid(1);
+            if tk <= prob.startupRampDuration + 1e-9
+                alphaEnvelopeMax = min(prob.alphaMax, prob.alphaStart + startupAlphaDotMax * tk);
+                opti.subject_to(Alpha{j}(k) <= alphaEnvelopeMax);
+            end
+        end
     end
 
     for k = 1:Nint

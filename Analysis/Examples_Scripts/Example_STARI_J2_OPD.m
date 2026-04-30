@@ -101,24 +101,24 @@ xd0 = deputy_cell_from_chief_roe_qns(xc0, {roe0,roe02});
 paramsChief.mu      = mu;
 paramsChief.RE      = RE;
 paramsChief.J2      = J2;
-paramsChief.muMoon  = 0;
-paramsChief.muSun   = 0;
-paramsChief.CR      = 0.0;
-paramsChief.As      = 0.0;
-paramsChief.m       = 1.0;
-paramsChief.S       = 0;
-paramsChief.c       = 2.998e8;
+paramsChief.muMoon  = 4903;          % km^3
+paramsChief.muSun   = 132.712e9;     % km^3
+paramsChief.CR      = 2;
+paramsChief.As      = 4.0;           % m^2
+paramsChief.m       = 100;           % kg
+paramsChief.S       = 1367;          % W/m^
+paramsChief.c       = 2.998e8;       % m/s
 paramsChief.jd0     = juliandate(datetime(2026,1,1,0,0,0));
 paramsChief.ephemModel = '421';
-paramsChief.useShadow = false;
+paramsChief.useShadow = true;
 
 paramsDeputy = paramsChief;
-paramsDeputy.As=0;
-paramsDeputy.m=1;
+paramsDeputy.As=4;
+paramsDeputy.m=100;
 
 paramsDeputy2 = paramsDeputy;
-paramsDeputy2.As=0;
-paramsDeputy2.m=1;
+paramsDeputy2.As=4;
+paramsDeputy2.m=100;
 
 %% ------------------------------------------------------------------------
 % Time span: 5 orbits

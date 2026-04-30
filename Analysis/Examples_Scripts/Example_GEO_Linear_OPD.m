@@ -60,23 +60,6 @@ delta_lambda_m  = 1000;            % m
 delta_lambda_km = delta_lambda_m / 1000;
 delta_lambda    = delta_lambda_km / a0;   % dimensionless ROE form
 
-% Only one deputy described here out of 3, other deputies have gamma +
-% 2*pi/3 and 4*pi/3
-% rho=5000/1000;
-% gamma=2*pi/3;
-% delta_ex = rho*(cos(gamma)*sin(phi0)+sin(gamma)*sin(beta)*cos(phi0));
-% delta_ey = -(rho/2)*(cos(gamma)*cos(phi0)-sin(gamma)*sin(beta)*sin(phi0));
-% delta_iy = -rho*sin(gamma)*cos(beta);
-
-% Initial ROE from attached STARI relation
-% roe0 = zeros(6,1);
-% roe0(1) = 0.0;
-% roe0(2) = 0.0;
-% roe0(3) = delta_ex/a0;
-% roe0(4) = delta_ey/a0;
-% roe0(5) = 0.0;
-% roe0(6) = delta_iy/a0;
-
  roe0 = zeros(6,1);
  roe0(1) = 0.0;
  roe0(2) = -delta_lambda;

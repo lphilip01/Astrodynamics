@@ -198,7 +198,7 @@ if optimize
 k0 = kStart-3;
 Tint = Tint_s;   % 60 min
 t0 = t(k0);
-h_ocp = 60;
+h_ocp = 30;
 Npts  = max(round(Tint/h_ocp) + 1, 30);
 tHold = linspace(0, Tint, Npts).';
 
@@ -232,7 +232,7 @@ prob.rhoMax_km = 1.2*rho;       % optional
 prob.dPairMin_km = 0.5*rho;     % pairwise min spacing
 prob.massDry_kg = .85*md;
 
-sol = solve_science_hold_ocp(tHold, chiefHold, depInit, paramsOCP, target, prob);
+sol = solve_science_hold_ocp_throttle_direction(tHold, chiefHold, depInit, paramsOCP, target, prob);
 else
 sol=[];
 end
@@ -256,31 +256,9 @@ figure();plot(t./(60*60),out.opd{1}.*1000,'DisplayName','Collector 1');hold on; 
 
 figure();plot(t./(60*60),out.opd{1}.*1000 + out.opd{2}.*1000+out.opd{3}.*1000,'DisplayName','Combined OPD');legend();title("OPD for Collector Satellites");ylabel("OPD (m)");xlabel("time");yline(0);
 
+if optimize
 figure();plot3(sol.RTN{1}(:,2).*1000,sol.RTN{1}(:,3).*1000,sol.RTN{1}(:,1).*1000,'DisplayName','Collector 1');hold on; plot3(sol.RTN{2}(:,2).*1000,sol.RTN{2}(:,3).*1000,sol.RTN{2}(:,1).*1000,'DisplayName','Collector 2');plot3(sol.RTN{3}(:,2).*1000,sol.RTN{3}(:,3).*1000,sol.RTN{3}(:,1).*1000,'DisplayName','Collector 3');legend();title("RTN for Collector Satellites");ylabel("Normal Position");xlabel("Tangential position");zlabel("Radial position");
-
-opts = struct();
-opts.Dmax_m = 5;
-opts.integrationTimes_s = [300 600 900 1200 1800 3600];
-opts.startMode = 'bestWindow';
-opts.entryTime_s = 60;
-opts.verbose = true;
-
-% hold_opd = estimate_dv_science_hold(t, out, opts);
-% 
-% figure();
-% plot(hold_opd.integrationTimes_s/60, hold_opd.totalDV_max_mps, 'LineWidth', 1.5);
-% xlabel('Integration time [min]');
-% ylabel('Estimated total \DeltaV max-per-sat [m/s]');
-% title('Science Hold Delta-V vs Integration Time');
-% grid on
-% 
-% figure();
-% plot(hold_opd.integrationTimes_s/60, hold_opd.totalDV_sum_mps, 'LineWidth', 1.5);
-% xlabel('Integration time [min]');
-% ylabel('Estimated total formation \DeltaV [m/s]');
-% title('Science Hold Delta-V (sum across collectors)');
-% grid on
-
+end
 
 end
 
