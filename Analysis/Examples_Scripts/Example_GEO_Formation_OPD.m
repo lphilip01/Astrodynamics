@@ -1,4 +1,4 @@
-function [out, sol]=Example_GEO_Formation_OPD(ra,dec,rho_m,Tint_s,inc,Asc,mc,Asd,md,T,dmax,plot_figs,optimize)
+function [out, sol]=Example_GEO_Formation_OPD(ra,dec,rho_m,Tint_s,inc,Asc,mc,Asd,md,T,dmax,settle_time,plot_figs,optimize)
 % Example_GEO_Linear_OPD
 %
 % End-to-end STARI validation example using the full OPD-rate pipeline:
@@ -26,7 +26,7 @@ deg = pi/180;
 % Chief orbit (GEO, frozen)
 %% ------------------------------------------------------------------------
 a0    = 42164;               % km
-e0    = 1e-4;
+e0    = 0;
 inc0  = inc * deg;
 RAAN0 = 0.0* deg;
 w0    = 0.0* deg;
@@ -65,7 +65,6 @@ xc0 = [a0; ex0; ey0; inc0; RAAN0; u0];
  delta_ey3 = -(rho/2)*(cos(gamma)*cos(phi0)-sin(gamma)*sin(beta)*sin(phi0));
  delta_iy3 = -rho*sin(gamma)*cos(beta);
 
-% Initial ROE from attached STARI relation
  roe0 = zeros(6,1);
  roe0(1) = 0.0;
  roe0(2) = 0.0;
@@ -90,30 +89,6 @@ xc0 = [a0; ex0; ey0; inc0; RAAN0; u0];
  roe03(5) = 0.0;
  roe03(6) = delta_iy3/a0;
 
- fprintf('Initial GEO ROE d1:\n');
- fprintf('delta_a      = %.6e\n', roe0(1));
- fprintf('delta_lambda = %.6e\n', roe0(2));
- fprintf('delta_ex     = %.6e\n', roe0(3));
- fprintf('delta_ey     = %.6e\n', roe0(4));
- fprintf('delta_ix     = %.6e\n', roe0(5));
- fprintf('delta_iy     = %.6e\n', roe0(6));
-
- fprintf('Initial STARI ROE d2:\n');
- fprintf('delta_a      = %.6e\n', roe02(1));
- fprintf('delta_lambda = %.6e\n', roe02(2));
- fprintf('delta_ex     = %.6e\n', roe02(3));
- fprintf('delta_ey     = %.6e\n', roe02(4));
- fprintf('delta_ix     = %.6e\n', roe02(5));
- fprintf('delta_iy     = %.6e\n', roe02(6));
-
-  fprintf('Initial STARI ROE d2:\n');
- fprintf('delta_a      = %.6e\n', roe02(1));
- fprintf('delta_lambda = %.6e\n', roe02(2));
- fprintf('delta_ex     = %.6e\n', roe02(3));
- fprintf('delta_ey     = %.6e\n', roe02(4));
- fprintf('delta_ix     = %.6e\n', roe02(5));
- fprintf('delta_iy     = %.6e\n', roe02(6));
- 
 %% ------------------------------------------------------------------------
 % Build deputy initial QNS state from chief + ROE
 %% ------------------------------------------------------------------------
@@ -126,7 +101,7 @@ paramsChief.mu      = mu;
 paramsChief.RE      = RE;
 paramsChief.J2      = J2;
 paramsChief.muMoon  = 4903;          % km^3/s^2 
-paramsChief.muSun   = 132712;     % km^3/s^2 
+paramsChief.muSun   = 1.3271244*10^11;     % km^3/s^2 
 paramsChief.CR      = 1.5; %2
 paramsChief.As      = Asc;           % m^2 3
 paramsChief.m       = mc;           % kg 400
@@ -152,7 +127,7 @@ paramsDeputy3.m=md;
 % Time span: 5 orbits
 %% ------------------------------------------------------------------------
 T0 = 2*pi*sqrt(a0^3/mu);
-nOrbits = 2;
+nOrbits = 3;
 tf = nOrbits * T0;
 
 nout  = 3000;
@@ -189,18 +164,44 @@ out.star.phi0=phi0;
 out.star.beta=beta;
 out.star.ra=ra;
 out.star.dec=dec;
-% Suppose you already selected a science-hold start index k0
-% and extracted chief and deputy states over the desired hold interval:
+
+% Complete star -> collector -> combiner path, relative to a common
+% star -> combiner path. Units: km.
+chiefGeometry = struct( ...
+    'inc', xc(:,4), 'RAAN', xc(:,5), 'u', xc(:,6));
+
+out.OPDfull_km = zeros(numel(t), numel(xdCell));
+for j = 1:numel(xdCell)
+    roe = roe_from_qns_chief_deputy(xc, xdCell{j});
+    dr  = rtn_from_roe(roe, xc(:,1), xc(:,6));
+    external_km = opd_from_rtn(dr, 'radec', [ra dec], chiefGeometry);
+    out.OPDfull_km(:,j) = sqrt(sum(dr.^2, 2)) - external_km;
+end
+out.OPDfullSpread_m = 1000 * ...
+    (max(out.OPDfull_km, [], 2) - min(out.OPDfull_km, [], 2));
+
+out.perturbations = differential_perturbation_report( ...
+    out, paramsChief, {paramsDeputy,paramsDeputy2,paramsDeputy3}, plot_figs);
+
+
 if optimize
 
-[kStart, info] = find_science_hold_start(out, 5, 'bestLocal');
+settle_s = settle_time; 
 
-k0 = kStart-3;
-Tint = Tint_s;   % 60 min
+[k0, info] = find_science_hold_start( ...
+    out, dmax, T0, settle_s, Tint_s);
+
 t0 = t(k0);
-h_ocp = 30;
-Npts  = max(round(Tint/h_ocp) + 1, 30);
-tHold = linspace(0, Tint, Npts).';
+nSettle = ceil(info.settleDuration_s / 30);
+h_ocp = info.settleDuration_s / nSettle;
+nScience = ceil(Tint_s / h_ocp);
+
+tHold = (0:nSettle+nScience).' * h_ocp;
+if t0 + tHold(end) > t(end)
+    error('Extend the propagation to cover settling and science.');
+end
+
+prob.scienceStartNode = nSettle + 1;
 
 % Interpolate chief onto hold grid
 chiefHold = interp1(t - t0, xc, tHold, 'linear');
@@ -222,9 +223,9 @@ paramsOCP.ephem.t = tHold;
 paramsOCP.ephem.rSun  = interp1(t - t0, paramsChief.ephem.rSun,  tHold, 'linear');
 paramsOCP.ephem.rMoon = interp1(t - t0, paramsChief.ephem.rMoon, tHold, 'linear');
 
-target.type = 'phibeta';
-target.phi0 = phi0;
-target.beta = beta;
+target.type = 'radec';
+target.ra = ra;
+target.dec = dec;
 
 prob.Dmax_m = dmax;
 prob.rhoMin_km = .8*rho;       % keep collectors far from combiner
@@ -233,6 +234,11 @@ prob.dPairMin_km = 0.5*rho;     % pairwise min spacing
 prob.massDry_kg = .85*md;
 
 sol = solve_science_hold_ocp_throttle_direction(tHold, chiefHold, depInit, paramsOCP, target, prob);
+
+sol.scienceStartNode = prob.scienceStartNode;
+sol.info   = info;        % handoff/alignment times from find_science_hold_start
+sol.target = target;
+
 else
 sol=[];
 end
@@ -250,8 +256,73 @@ plot_science_hold_ocp_solution(sol)
 end
 
 
-figure();plot3(out.dr_rtn{1}(:,2).*1000,out.dr_rtn{1}(:,3).*1000,out.dr_rtn{1}(:,1).*1000,'DisplayName','Collector 1');hold on; plot3(out.dr_rtn{2}(:,2).*1000,out.dr_rtn{2}(:,3).*1000,out.dr_rtn{2}(:,1).*1000,'DisplayName','Collector 2');plot3(out.dr_rtn{3}(:,2).*1000,out.dr_rtn{3}(:,3).*1000,out.dr_rtn{3}(:,1).*1000,'DisplayName','Collector 3');legend();title("RTN for Collector Satellites");ylabel("Normal Position");xlabel("Tangential position");zlabel("Radial position");
-hold off
+figure('Units','inches','Position',[1 1 5 4.2]);
+
+% Color palette (colorblind-friendly, print-safe)
+colors = [0.0000, 0.4470, 0.7410;   % blue
+          0.8500, 0.3250, 0.0980;   % red-orange
+          0.4660, 0.6740, 0.1880];  % green
+
+lineStyles = {'-', '-', '-'};
+nCollectors = 3;
+
+ax = axes();
+hold(ax, 'on');
+
+for i = 1:nCollectors
+    T = out.dr_rtn{i}(:,2);   % Tangential [m]
+    N = out.dr_rtn{i}(:,3);   % Normal     [m]
+    R = out.dr_rtn{i}(:,1);   % Radial     [m]
+
+    ps=plot3(ax, T(1), R(1), N(1),'o', 'MarkerSize', 8,...
+        'Color',      colors(i,:), ...
+        'MarkerFaceColor', colors(i,:));
+    set(ps, 'HandleVisibility', 'off');
+
+    plot3(ax, T, R, N, ...
+        'LineStyle',  lineStyles{i}, ...
+        'LineWidth',  2, ...
+        'Color',      colors(i,:), ...
+        'DisplayName', sprintf('Collector %d', i));
+end
+
+hold(ax, 'off');
+
+%% Axis labels (with units)
+xlabel(ax, 'Tangential Position [km]', 'Interpreter', 'latex');
+ylabel(ax, 'Radial Position [km]',     'Interpreter', 'latex');
+zlabel(ax, 'Normal Position [km]',     'Interpreter', 'latex');
+
+%% Legend
+lgd = legend(ax, 'Location', 'best', 'Interpreter', 'latex','Box','on');
+lgd.FontSize = 10;
+
+%% Font & tick formatting
+set(ax, ...
+    'FontName',         'Times New Roman', ...
+    'FontSize',         12, ...
+    'FontWeight','bold',...
+    'TickLabelInterpreter', 'latex', ...
+    'LineWidth',        0.8, ...
+    'Box',              'on', ...
+    'XMinorTick',       'on', ...
+    'YMinorTick',       'on', ...
+    'ZMinorTick',       'on', ...
+    'TickDir',          'in', ...
+    'GridLineStyle',    '--', ...
+    'GridAlpha',        0.3);
+
+grid(ax, 'on');
+
+%% View angle — adjust to best reveal your formation geometry
+view(ax, 35, 25);
+
+%% Export at 600 DPI (IEEE/AIAA requirement)
+exportgraphics(gcf, 'rtn_trajectories.pdf', ...
+    'ContentType', 'vector', 'BackgroundColor', 'none');
+
+exportgraphics(gcf, 'rtn_trajectories.png', ...
+    'Resolution', 600, 'BackgroundColor', 'white');
 figure();plot(t./(60*60),out.opd{1}.*1000,'DisplayName','Collector 1');hold on; plot(t./(60*60),out.opd{2}.*1000,'DisplayName', 'Collector 2');plot(t./(60*60),out.opd{3}.*1000,'DisplayName', 'Collector 3');legend();title("OPD for Collector Satellites");ylabel("OPD (m)");xlabel("time");yline(0);
 
 figure();plot(t./(60*60),out.opd{1}.*1000 + out.opd{2}.*1000+out.opd{3}.*1000,'DisplayName','Combined OPD');legend();title("OPD for Collector Satellites");ylabel("OPD (m)");xlabel("time");yline(0);
@@ -262,7 +333,7 @@ end
 
 end
 
-metrics = formation_opd_metrics(out);
+metrics = formation_opd_metrics(num2cell(out.OPDfull_km,1));
 
 fprintf('\nMax formation OPD range: %.3f m\n', metrics.summary.maxRangeOPD_m);
 fprintf('Max formation RMS relative OPD: %.3f m\n', metrics.summary.maxRMSRelativeOPD_m);

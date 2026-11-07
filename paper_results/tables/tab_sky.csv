@@ -1,0 +1,14 @@
+Quantity,Value
+Sky accessible at least once [%],100
+Minimum coverage [% of time],44.5839516036982
+Mean coverage [% of time],65.0926524431032
+Median coverage [% of time],65.4263211962105
+Combiner in eclipse [% of time],4.1661910740783
+Median longest guaranteed window [h],22
+Maximum longest guaranteed window [h],22
+Targets with guaranteed window >= 2 h [%],100
+... >= 3 h [%],100
+... >= 4 h [%],100
+... >= 6 h [%],100
+Median revisit time [h],1
+Mean revisit time [h],6.95125825172559

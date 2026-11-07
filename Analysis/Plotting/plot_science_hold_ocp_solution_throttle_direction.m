@@ -104,6 +104,142 @@ ylabel(['OPD spread [', llabel, ']'])
 title('Formation OPD Spread')
 grid on
 
+%% ── OPD Spread – Journal-Quality Figure ──────────────────────────────────
+figure('Units','inches','Position',[1 1 7 5]);
+
+% Leave extra right margin so the D_max label never gets clipped
+ax = axes('Units','normalized','Position',[0.10 0.11 0.80 0.81]);
+hold(ax,'on');
+
+% ── 0.  Unit / data setup ────────────────────────────────────────────────
+unitFactor = 1;          % 1 → m | 0.01 → cm | 1e9 → nm
+unitLabel  = 'm';
+OPDplot    = OPDspread * unitFactor;
+
+Dmax = 3;
+if isfield(sol,'Dmax_m')
+    Dmax = sol.Dmax_m * unitFactor;
+end
+
+t_settle = 10;           % minutes — edit to match your simulation
+tMin     = tt(1);
+tMax     = tt(end);
+yTop     = max(OPDplot) * 1.18;   % 18 % headroom above data
+
+% ── 2.  Green "feasible OPD" band (0 → Dmax, full time window) ───────────
+if ~isnan(Dmax)
+    patch(ax, [tMin tMax  tMax  tMin], ...
+              [0    0     Dmax  Dmax], ...
+        [0.18 0.72 0.18], ...
+        'FaceAlpha',0.10, 'EdgeColor','none', 'HandleVisibility','off');
+end
+
+% ── 3.  Gray "settling / acquisition" band ───────────────────────────────
+patch(ax, [tMin     t_settle  t_settle  tMin], ...
+          [0        0         yTop      yTop], ...
+    [0.6 0.6 0.6], ...
+    'FaceAlpha',0.18, 'EdgeColor','none', 'HandleVisibility','off');
+
+% ── 4.  Dmax horizontal dashed red line ──────────────────────────────────
+if ~isnan(Dmax)
+    yline(ax, Dmax, '--', ...
+        'Color',     [0.85 0.125 0.098], ...
+        'LineWidth',  1.4, ...
+        'DisplayName', sprintf('$D_{\\max} = %.0f$ %s', Dmax, unitLabel));
+end
+
+% ── 5.  OPD spread (main curve) ──────────────────────────────────────────
+plot(ax, tt, OPDplot, '-k', 'LineWidth', 1.8, ...
+    'DisplayName', 'OPD spread $\max_j D_j - \min_j D_j$');
+
+% ── 6.  Science-window statistics (mean + peak) ───────────────────────────
+idx_sci                  = tt >= t_settle;
+[T_sci, meanSci, peakSci, tPeakSci] = deal(NaN, NaN, NaN, NaN);
+
+if any(idx_sci) && ~isnan(Dmax)
+    OPD_sci  = OPDplot(idx_sci);
+    tt_sci   = tt(idx_sci);
+    meanSci  = mean(OPD_sci);
+    T_sci    = tMax - t_settle;
+    [peakSci, pkRel] = max(OPD_sci);
+    tPeakSci = tt_sci(pkRel);
+
+    yline(ax, meanSci, ':', ...
+        'Color',     [0.0 0.447 0.741], ...
+        'LineWidth',  1.2, ...
+        'DisplayName', sprintf('Mean spread (sci) $\\approx %.1f$ %s', ...
+                               meanSci, unitLabel));
+end
+
+% Settling boundary vertical line (no legend entry)
+xline(ax, t_settle, '-', ...
+    'Color',[0.4 0.4 0.4], 'LineWidth',1.0, 'HandleVisibility','off');
+
+hold(ax,'off');
+
+% ── 8.  Annotations ──────────────────────────────────────────────────────
+
+% (a) "Settling / acquisition" — BOTTOM of gray band (avoids peak collision)
+text(ax, tMin + 0.5*(t_settle - tMin), yTop * 0.05, ...
+    {'Settling /'; 'acquisition'}, ...
+    'Interpreter','latex', 'FontName','Times New Roman', ...
+    'FontSize', 10, 'Color',[0.30 0.30 0.30], ...
+    'HorizontalAlignment','center', 'VerticalAlignment','bottom');
+
+% (b) "Science integration" label — upper-centre of science zone
+if ~isnan(T_sci)
+    text(ax, t_settle + 0.46*(tMax - t_settle), yTop * 0.93, ...
+        sprintf('Science integration\\;\\;$T_{\\mathrm{sci}} = %.0f$ min', T_sci), ...
+        'Interpreter','latex', 'FontName','Times New Roman', ...
+        'FontSize', 10, 'Color',[0.10 0.45 0.10], ...
+        'HorizontalAlignment','center', 'VerticalAlignment','top');
+end
+
+% (c) Peak-during-science annotation (avoids the settling zone entirely)
+if ~isnan(peakSci)
+    text(ax, tPeakSci, peakSci + yTop * 0.04, ...
+        sprintf('Peak: $%.1f$ %s', peakSci, unitLabel), ...
+        'Interpreter','latex', 'FontName','Times New Roman', ...
+        'FontSize', 10, 'Color',[0 0 0], ...
+        'HorizontalAlignment','center', 'VerticalAlignment','bottom');
+end
+
+% (d) Dmax label on right margin — 'Clipping','off' keeps it visible
+if ~isnan(Dmax)
+    text(ax, tMax + 0.4*(tMax-tMin)*0.01, Dmax, '$D_{\max}$', ...
+        'Interpreter','latex', 'FontName','Times New Roman', ...
+        'FontSize', 10, 'Color',[0.85 0.125 0.098], ...
+        'HorizontalAlignment','left', 'VerticalAlignment','middle', ...
+        'Clipping','off');
+end
+
+% ── 9.  Axis limits & labels ─────────────────────────────────────────────
+ylim(ax, [0, yTop]);
+xlim(ax, [tMin, tMax]);
+
+xlabel(ax, tlabel,                                 'Interpreter','latex','FontSize',12);
+ylabel(ax, sprintf('OPD spread [%s]', unitLabel),  'Interpreter','latex','FontSize',12);
+title(ax,  'Formation OPD Spread',                 'Interpreter','latex','FontSize',13);
+
+% ── 10.  Legend ───────────────────────────────────────────────────────────
+lgd = legend(ax, 'Location','northeast', 'Interpreter','latex', 'Box','on');
+lgd.FontSize = 10;
+
+% ── 11.  Axes cosmetics ───────────────────────────────────────────────────
+set(ax, ...
+    'FontName',             'Times New Roman', ...
+    'FontSize',              11, ...               % tick labels ≥ 10 pt
+    'FontWeight',           'bold', ...
+    'TickLabelInterpreter', 'latex', ...
+    'LineWidth',             0.9, ...
+    'Box',                  'on', ...
+    'XMinorTick',           'on', ...
+    'YMinorTick',           'on', ...
+    'TickDir',              'in', ...
+    'GridLineStyle',        '--', ...
+    'GridAlpha',             0.3);
+
+grid(ax,'on');
 % ---------------- Figure 2: Controls ----------------
 figure('Name','Science Hold OCP - Controls','Color','w');
 

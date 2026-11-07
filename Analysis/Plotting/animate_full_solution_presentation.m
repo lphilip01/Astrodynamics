@@ -79,11 +79,13 @@ if Nc < 3
 end
 
 if isempty(opts.holdStartIndex)
-    kStart = find_science_hold_start(out, opts.Dmax_m, opts.holdStartMode);
+settle_s = 3600;  % initial allowance; tune from solved trajectories
+
+[kStart, info] = find_science_hold_start( ...
+    out, opts.Dmax_m, 86163.618301525246351957321166992, settle_s, sol.info.scienceDuration_s);
 else
     kStart = opts.holdStartIndex;
 end
-kStart=kStart-3;
 
 [mode, target] = local_resolve_target(out, opts);
 data = local_build_full_history(out, sol, kStart, mode, target, opts);

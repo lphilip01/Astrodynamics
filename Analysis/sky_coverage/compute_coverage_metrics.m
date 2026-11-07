@@ -43,19 +43,26 @@ function metrics = compute_coverage_metrics(coverage_count, total_duration, ...
         metrics.revisit_dist = [];
     end
     
-    %% Special Region Coverage
-    % Ecliptic plane coverage (|Dec| < 10 degrees from ecliptic)
-    ecliptic_obliquity = 23.44;  % degrees
-    dec_ecliptic = DEC_mesh - ecliptic_obliquity;  % Approximate
-    ecliptic_mask = abs(dec_ecliptic) < 10;
-    metrics.ecliptic_coverage = 100 * sum(ever_visible(ecliptic_mask)) / sum(ecliptic_mask(:));
-    
-    % Galactic plane coverage (approximate galactic equator)
-    % Galactic center at RA~266°, Dec~-29°
-    % Simplified: check coverage near Dec = -29° ± 10°
-    galactic_mask = abs(DEC_mesh + 29) < 10;
-    metrics.galactic_coverage = 100 * sum(ever_visible(galactic_mask)) / sum(galactic_mask(:));
-    
+   %% Special Region Coverage (true ecliptic and galactic latitude bands)
+    eps_obl = 23.4393;                                   % obliquity at J2000 [deg]
+    v = [cosd(DEC_mesh(:)).*cosd(RA_mesh(:)), ...
+         cosd(DEC_mesh(:)).*sind(RA_mesh(:)), ...
+         sind(DEC_mesh(:))];                             % ICRS unit vectors
+    lat_ecl = asind(-sind(eps_obl)*v(:,2) + cosd(eps_obl)*v(:,3));
+    A_G3    = [-0.8676661490, -0.1980763734, 0.4559837762]; % third row, ICRS -> Galactic
+    lat_gal = asind(v*A_G3.');
+    ecliptic_mask = reshape(abs(lat_ecl) < 10, size(coverage_count));
+    galactic_mask = reshape(abs(lat_gal) < 10, size(coverage_count));
+    metrics.ecliptic_coverage       = 100*sum(ever_visible(ecliptic_mask))/sum(ecliptic_mask(:));
+    metrics.galactic_coverage       = 100*sum(ever_visible(galactic_mask))/sum(galactic_mask(:));
+    metrics.ecliptic_mean_percent   = mean(coverage_percent(ecliptic_mask));
+    metrics.galactic_mean_percent   = mean(coverage_percent(galactic_mask));
+
+    %% Additional statistics for the paper
+    metrics.min_coverage_percent = min(coverage_percent(:));
+    metrics.window_h = [1 2 3 4];
+    metrics.pct_targets_with_window = arrayfun( ...
+        @(w) 100*mean(max_continuous(:) >= w*3600), metrics.window_h);
     %% Coverage by Declination Band
     dec_bands = [-90, -60, -30, 0, 30, 60, 90];
     metrics.coverage_by_dec = zeros(length(dec_bands)-1, 1);

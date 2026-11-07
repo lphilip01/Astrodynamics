@@ -58,15 +58,20 @@ if ~isfield(prob,'phase2_wFuel'),           prob.phase2_wFuel = 1; end
 if ~isfield(prob,'phase2_wControl'),        prob.phase2_wControl = 1e-4; end
 if ~isfield(prob,'phase2_wSmooth'),         prob.phase2_wSmooth = 1e-2; end
 
-if ~isfield(prob,'alphaMin'),               prob.alphaMin = .2; end
+if ~isfield(prob,'alphaMin'),               prob.alphaMin = 300/800; end
 if ~isfield(prob,'alphaMax'),               prob.alphaMax = 1; end
-if ~isfield(prob,'alphaStart'),             prob.alphaStart = .2; end
+if ~isfield(prob,'alphaStart'),             prob.alphaStart = 300/800; end
 if ~isfield(prob,'alphaFinal'),             prob.alphaFinal = []; end
 if ~isfield(prob,'throttleRateMax'),        prob.throttleRateMax = 1.33e-3; end
 if ~isfield(prob,'dirRateMax'),             prob.dirRateMax = .0457; end
 if ~isfield(prob,'startupRampDuration'),    prob.startupRampDuration = 600; end
 if ~isfield(prob,'startupThrottleRateMax'), prob.startupThrottleRateMax = 1.33e-3; end
 if ~isfield(prob,'initialDirectionRTN'),    prob.initialDirectionRTN = [0; 1; 0]; end
+% Relay-path (collector-to-combiner) cost weights. Units: per m^2 of
+% relay-path deviation from the formation-mean relay path.
+if ~isfield(prob,'phase1_wRelay'), prob.phase1_wRelay = 0;    end
+if ~isfield(prob,'phase2_wRelay'), prob.phase2_wRelay = 1e-3; end
+
 
 if prob.alphaMin < 0 || prob.alphaMax > 1 || prob.alphaMin > prob.alphaMax
     error('Require 0 <= prob.alphaMin <= prob.alphaMax <= 1.');
@@ -165,26 +170,19 @@ for j = 1:Nc
     DirGuessCell{j} = dir_guess;
 end
 
-% =========================================================================
-% Phase 1 solve
-% =========================================================================
 phase1 = build_and_solve_phase( ...
     'phase1', tGrid, xc, deputyInitCell, params, target, prob, F_rk4, ...
     XguessCell, AlphaGuessCell, DirGuessCell, ...
     prob.phase1ConstraintStride, ...
-    prob.phase1_wSlack, 0, 0, prob.phase1_wSmooth);
+    prob.phase1_wSlack, 0, 0, prob.phase1_wSmooth, prob.phase1_wRelay);
 
 phase1Warm = local_phase_to_warm_start(phase1);
 
-% =========================================================================
-% Phase 2 solve (full constraints, warm start)
-% =========================================================================
 phase2 = build_and_solve_phase( ...
     'phase2', tGrid, xc, deputyInitCell, params, target, prob, F_rk4, ...
     phase1Warm.X, phase1Warm.Alpha, phase1Warm.Dir, ...
     1, ...
-    prob.phase2_wSlack, prob.phase2_wFuel, prob.phase2_wControl, prob.phase2_wSmooth);
-
+    prob.phase2_wSlack, prob.phase2_wFuel, prob.phase2_wControl, prob.phase2_wSmooth, prob.phase2_wRelay);
 % =========================================================================
 % Final solution packaging
 % =========================================================================
@@ -210,7 +208,7 @@ end
 
 % =========================================================================
 function sol = build_and_solve_phase(phaseName, tGrid, chiefHist, deputyInitCell, params, target, prob, F_rk4, ...
-                                     XinitCell, AlphaInitCell, DirInitCell, constraintStride, wSlack, wFuel, wControl, wSmooth)
+                                     XinitCell, AlphaInitCell, DirInitCell, constraintStride, wSlack, wFuel, wControl, wSmooth, wRelay)
 
 import casadi.*
 
@@ -324,11 +322,22 @@ for j = 1:Nc
 end
 
 % -------------------------------------------------------------------------
-% Path constraints
+% Path constraints  (complete relayed-beam OPD, L_int neglected)
+%
+%   D_tot,j = -(dr_j . s) + ||dr_j||
+%             \_________/   \_______/
+%              external      collector->combiner relay
+%
+% s points from the formation toward the star.
 % -------------------------------------------------------------------------
+Jrelay   = 0;        % relay-path cost accumulator [m^2]
+relayEps = 1e-9;     % [km] smoothing so sqrt() is differentiable at 0
+
 for k = 1:constraintStride:Nt
-    opd_k = MX.zeros(Nc,1);
-    drMat = MX.zeros(3,Nc);
+    opd_k   = MX.zeros(Nc,1);   % total relayed-beam path (km)
+    ext_k   = MX.zeros(Nc,1);   % external projection term (km)
+    relay_k = MX.zeros(Nc,1);   % collector-to-combiner relay path (km)
+    drMat   = MX.zeros(3,Nc);
 
     ac    = xc(k,1);
     exc   = xc(k,2);
@@ -373,16 +382,32 @@ for k = 1:constraintStride:Nt
 
         dr = [dR; dT; dN];
         drMat(:,j) = dr;
-        opd_k(j) = dr.' * sRTN;
+
+        ext_k(j)   = dr.' * sRTN;                   % external wavefront term
+        relay_k(j) = sqrt(sumsqr(dr) + relayEps^2); % ||dr_j||
+        opd_k(j)   = -ext_k(j) + relay_k(j);        % complete relayed-beam path
     end
 
-    opdMean = sum1(opd_k)/Nc;
-
-    % Soft OPD spread constraint
-    for j = 1:Nc
-        opti.subject_to(opd_k(j) - opdMean <=  Dtol_km + Sopd(j,k));
-        opti.subject_to(opd_k(j) - opdMean >= -Dtol_km - Sopd(j,k));
+    Dmax_km = prob.Dmax_m / 1000;
+    
+    for i = 1:Nc-1
+        for j = i+1:Nc
+            if strcmp(phaseName, 'phase2') && k >= prob.scienceStartNode
+                allowance = Dmax_km;
+            else
+                allowance = Dmax_km + Sopd(i,k) + Sopd(j,k);
+            end
+            opti.subject_to(opd_k(i) - opd_k(j) <= allowance);
+            opti.subject_to(opd_k(j) - opd_k(i) <= allowance);
+        end
     end
+
+    % Relay-path cost: penalize deviation of each collector's range from
+    % the formation-mean range (in meters), weighted by stride so the
+    % phase-1 subsampled cost has comparable scale.
+    relayMean_k = sum1(relay_k)/Nc;
+    relayDev_m  = 1000*(relay_k - relayMean_k);
+    Jrelay      = Jrelay + constraintStride * sumsqr(relayDev_m);
 
     % Baseline preservation
     for j = 1:Nc
@@ -428,7 +453,7 @@ end
 
 Jslack = wSlack * sum1(sum2(Sopd));
 
-J = wFuel*Jfuel + Jctrl + Jsmooth + Jslack;
+J = wFuel*Jfuel + Jctrl + Jsmooth + Jslack + wRelay*Jrelay;
 opti.minimize(J);
 
 % -------------------------------------------------------------------------
@@ -475,6 +500,7 @@ sol.phaseName = phaseName;
 sol.t = tGrid;
 sol.chief = chiefHist;
 sol.Ncollectors = Nc;
+sol.Jrelay = S.value(Jrelay);
 
 sol.X = cell(1,Nc);
 sol.Alpha = cell(1,Nc);
@@ -503,8 +529,11 @@ sol.Jslack = S.value(Jslack);
 sol.massUsedTotal_kg = sum(sol.massUsed_kg);
 
 % Recompute OPD spread from solution
-sol.OPD_km = zeros(Nt,Nc);
+sol.OPD_km      = zeros(Nt,Nc);   % complete relayed-beam path: -dr.s + ||dr||
+sol.OPDext_km   = zeros(Nt,Nc);   % external term: dr.s  (old metric)
+sol.relay_km    = zeros(Nt,Nc);   % ||dr||
 sol.OPDspread_km = zeros(Nt,1);
+sol.RTN = cell(1,Nc);
 
 for k = 1:Nt
     ac    = chiefHist(k,1);
@@ -527,12 +556,8 @@ for k = 1:Nt
     for j = 1:Nc
         xd = sol.X{j}(k,:).';
 
-        ad  = xd(1);
-        exd = xd(2);
-        eyd = xd(3);
-        id  = xd(4);
-        RAd = xd(5);
-        ud  = xd(6);
+        ad  = xd(1);  exd = xd(2);  eyd = xd(3);
+        id  = xd(4);  RAd = xd(5);  ud  = xd(6);
 
         dRA = RAd - RAc;
         du  = ud  - uc;
@@ -547,8 +572,13 @@ for k = 1:Nt
         dR = ac*( delta_a - cos(uc)*delta_ex - sin(uc)*delta_ey );
         dT = ac*( delta_lam + 2*sin(uc)*delta_ex - 2*cos(uc)*delta_ey );
         dN = ac*( sin(uc)*delta_ix - cos(uc)*delta_iy );
-        sol.RTN{j}(k,:) = [dR dT dN];
-        sol.OPD_km(k,j) = [dR dT dN] * full(sRTN(:));
+
+        drk = [dR; dT; dN];
+        sol.RTN{j}(k,:) = drk.';
+
+        sol.OPDext_km(k,j) = drk.' * full(sRTN(:));
+        sol.relay_km(k,j)  = norm(drk);
+        sol.OPD_km(k,j)    = -sol.OPDext_km(k,j) + sol.relay_km(k,j);
     end
 
     sol.OPDspread_km(k) = max(sol.OPD_km(k,:)) - min(sol.OPD_km(k,:));
@@ -562,6 +592,8 @@ end
 sol.OPDspread_m = 1000*sol.OPDspread_km;
 sol.OPDmean_km = mean(sol.OPD_km, 2);
 sol.OPDrelative_km = sol.OPD_km - sol.OPDmean_km;
+sol.OPDextSpread_m  = 1000*(max(sol.OPDext_km,[],2) - min(sol.OPDext_km,[],2));
+sol.relaySpread_m   = 1000*(max(sol.relay_km,[],2)  - min(sol.relay_km,[],2));
 
 % -------------------------------------------------------------------------
 % E) Pairwise separations
@@ -704,9 +736,9 @@ That = [ -cO*su - sO*cu*ci;
          -sO*su + cO*cu*ci;
           cu*si ];
 
-Nhat = [-sO*si;
-         cO*si;
-         -ci ];
+Nhat = [sO*si;
+         -cO*si;
+         ci ];
 
 sRTN = [dot(sI,Rhat);
         dot(sI,That);

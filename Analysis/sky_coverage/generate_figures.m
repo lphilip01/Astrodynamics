@@ -93,18 +93,31 @@ function generate_figures(RA_mesh, DEC_mesh, coverage_count, total_duration, ...
     plot_sky_map(RA_mesh, DEC_mesh, metrics.coverage_percent, ...
                 'Coverage (%)', [0, 100], 'turbo');
     
-    % Overlay ecliptic and galactic planes
+ % Overlay ecliptic and galactic plane (exact great circles) and targets
     hold on;
-    
-    % Ecliptic plane
-    ra_ecliptic = 0:1:360;
-    dec_ecliptic = 23.44 * sind(ra_ecliptic);  % Simplified
-    plot(ra_ecliptic, dec_ecliptic, 'k--', 'LineWidth', 2, 'DisplayName', 'Ecliptic');
-    
-    % Galactic plane (very simplified)
-    dec_galactic = -29 * ones(size(ra_ecliptic));
-    plot(ra_ecliptic, dec_galactic, 'b--', 'LineWidth', 2, 'DisplayName', 'Galactic Plane');
-    
+    eps_obl = 23.4393;
+    lam = linspace(0, 2*pi, 3601);
+    xe = cos(lam);  ye = sin(lam)*cosd(eps_obl);  ze = sin(lam)*sind(eps_obl);
+    [ra_e, ord] = sort(mod(atan2d(ye, xe), 360));
+    plot(ra_e, asind(ze(ord)), 'k--', 'LineWidth', 2, 'DisplayName', 'Ecliptic');
+
+    A_G = [-0.0548755604, -0.8734370902, -0.4838350155; ...
+            0.4941094279, -0.4448296300,  0.7469822445; ...
+           -0.8676661490, -0.1980763734,  0.4559837762];   % ICRS -> Galactic
+    bl = linspace(0, 2*pi, 3601);
+    vg = A_G.' * [cos(bl); sin(bl); zeros(size(bl))];      % galactic equator in ICRS
+    [ra_g, ord] = sort(mod(atan2d(vg(2,:), vg(1,:)), 360));
+    plot(ra_g, asind(vg(3,ord)), 'b--', 'LineWidth', 2, 'DisplayName', 'Galactic plane');
+    plot(266.40, -28.94, 'bp', 'MarkerFaceColor', 'b', 'MarkerSize', 9, ...
+         'DisplayName', 'Galactic center');
+
+    tgt = {'Altair', 5.1832, 0.1548; 'Deneb', 5.403, 0.800; 'Beta Pictoris', 1.514, -0.892};
+    mk  = {'o', 's', '^'};
+    for q = 1:size(tgt,1)
+        plot(rad2deg(tgt{q,2}), rad2deg(tgt{q,3}), mk{q}, 'MarkerSize', 8, ...
+             'MarkerFaceColor', 'w', 'MarkerEdgeColor', 'k', 'LineWidth', 1.5, ...
+             'DisplayName', tgt{q,1});
+    end
     legend('Location', 'southeast');
     title('Sky Coverage with Celestial Reference Planes', 'FontSize', 14, 'FontWeight', 'bold');
     hold off;

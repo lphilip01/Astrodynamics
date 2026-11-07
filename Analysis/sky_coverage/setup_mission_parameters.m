@@ -21,9 +21,9 @@ params.chief.RAAN = deg2rad(raan);
 params.chief.u    = 0;
 
 % Dynamics settings
-params.dyn.CR = 2;
-params.dyn.As = 2;         % m^2
-params.dyn.m  = 200;       % kg
+params.dyn.CR = 1.5;
+params.dyn.As = 613*.003;         % m^2
+params.dyn.m  = 613;       % kg
 params.dyn.S  = 1367;      % W/m^2
 params.dyn.c  = 2.998e8;   % m/s
 params.dyn.ephemModel = '421';

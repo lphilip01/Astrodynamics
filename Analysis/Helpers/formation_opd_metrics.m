@@ -41,16 +41,16 @@ function metrics = formation_opd_metrics(out)
 % -------------------------------------------------------------------------
 % Convert out.opd to matrix form [Nt x N]
 % -------------------------------------------------------------------------
-if iscell(out.opd)
-    N = numel(out.opd);
-    Nt = length(out.opd{1});
+if iscell(out)
+    N = numel(out);
+    Nt = length(out{1});
     opdMatrix = zeros(Nt, N);
     for k = 1:N
-        opdMatrix(:,k) = out.opd{k}(:);
+        opdMatrix(:,k) = out{k}(:);
     end
 else
     N = 1;
-    opdMatrix = out.opd(:);
+    opdMatrix = out(:);
     Nt = length(opdMatrix);
 end
 

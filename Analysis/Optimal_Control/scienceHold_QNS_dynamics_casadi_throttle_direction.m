@@ -15,6 +15,8 @@ function xdot = scienceHold_QNS_dynamics_casadi_throttle_direction(x, throttle, 
 %   throttle     = scalar alpha in [0, 1]
 %   thrustDirRTN = [dR; dT; dN], intended to be unit norm
 
+import casadi.*
+
 mu     = params.mu;
 RE     = params.RE;
 J2     = params.J2;
@@ -56,9 +58,9 @@ That = [ -cO*su - sO*cu*ci;
          -sO*su + cO*cu*ci;
           cu*si ];
 
-Nhat = [ -sO*si;
-          cO*si;
-         -ci ];
+Nhat = [ sO*si;
+          -cO*si;
+         ci ];
 
 r_sat = r * Rhat;
 
@@ -68,12 +70,30 @@ AR_J2 = facJ2 * (1 - 3*si^2*su^2);
 AT_J2 = facJ2 * (si^2 * sin(2*u));
 AN_J2 = facJ2 * (sin(2*inc) * su);
 
-% SRP
+% Solar radiation pressure, including the propagation model's shadow rule.
 if (As == 0) || (CR == 0) || (S == 0)
     AR_SRP = 0; AT_SRP = 0; AN_SRP = 0;
 else
+    illuminated = 1;
+
+    if isfield(params, 'useShadow') && params.useShadow
+        if isa(r_sat, 'casadi.MX') || isa(r_sat, 'casadi.SX')
+            rsat = sqrt(sum(r_sat.^2));
+            rsun = sqrt(sum(rSun.^2));
+            theta = acos(dot(r_sat, rSun) / (rsat * rsun));
+            theta_sat = acos(RE / rsat);
+            theta_sun = acos(RE / rsun);
+
+            illuminated = if_else( ...
+                theta_sat + theta_sun <= theta, 0, 1);
+        else
+            illuminated = los_qns(r_sat, rSun, RE);
+        end
+    end
+
     s_hat = rSun / sqrt(sum(rSun.^2));
-    pSR = (S/c) * CR * As / m / 1000;   % km/s^2
+    pSR = illuminated * (S/c) * CR * As / m / 1000; % km/s^2
+
     AR_SRP = -pSR * dot(s_hat, Rhat);
     AT_SRP = -pSR * dot(s_hat, That);
     AN_SRP = -pSR * dot(s_hat, Nhat);
