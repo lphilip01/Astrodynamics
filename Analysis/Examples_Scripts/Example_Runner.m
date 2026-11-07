@@ -42,8 +42,8 @@ optimize=1;
  
  %Sky_Coverage_Runner(inc,0);
  if sol.success
- save('sol_3600_int_3600_settle_tau_ceti','sol');
- save('out_3600_int_3600_settle_tau_ceti','out');
+ save('sol_7200_int_3600_settle_tau_ceti','sol');
+ save('out_7200_int_3600_settle_tau_ceti','out');
  end
  
  Tint_s = 120*60;     % integration time s
